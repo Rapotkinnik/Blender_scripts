@@ -277,7 +277,156 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             progress.leave_substeps()
             
         return {'FINISHED'}
-        
+   
+'''   
+    def execute(self, context):
+        from mathutils import Matrix                                         
+        global_matrix = Matrix.Scale(self.global_scale, 4) * axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
+        if global_matrix is None:
+            global_matrix = mathutils.Matrix()
+
+        scene = context.scene
+
+        # Exit edit mode before exporting, so current object states are exported properly.
+        if bpy.ops.object.mode_set.poll():
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        objects = context.selected_objects if self.use_selection else scene.objects
+
+        with open(self.filepath, "w", encoding="utf8", newline="\n") as f:
+            fw = f.write
+
+            if self.include_vertex_header:
+                fw("#import \"%s\"\n\n" % self.include_vertex_header)
+            elif self.use_normals:
+                fw("typedef struct\n"
+                   "{\n"
+                   "\tGLfloat vertexPosition[3];\n"
+                   "\tGLfloat vertexColor[4];\n"
+                   "\tGLfloat normalDirection[3];\n"
+                   "\tGLfloat texturePosition[2];\n"
+                   "}Vertex;\n\n")
+            else:
+                fw("typedef struct\n"
+                   "{\n"
+                   "\tGLfloat vertexPosition[3];\n"
+                   "\tGLfloat vertexColor[4];\n"
+                   "\tGLfloat texturePosition[2];\n"
+                   "}Vertex;\n\n")
+
+            # Tell the obj file what material file to use.
+            # if materials_export_type == 'FM':
+            #    mtlfilepath = os.path.splitext(filepath)[0] + ".mtl"
+            #    # filepath can contain non utf8 chars, use repr
+            #    fw('//mtllib %s\n' % repr(os.path.basename(mtlfilepath))[1:-1])
+
+            for obj in objects:
+                if obj.parent and obj.parent.dupli_type in {'VERTS', 'FACES'}:
+                    continue
+
+                # if use_nurbs and object.type == 'CURVE':
+                #   points = object.data.splines.points
+                #    continue
+
+                try:
+                    me = obj.to_mesh(scene, self.use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                except RuntimeError:
+                    continue
+
+                if self.export_as_scene:
+                    me.transform(global_matrix * obj.matrix_world)
+
+                # Triangulation
+                import bmesh
+                bm = bmesh.new()
+
+                bm.from_mesh(me)
+                bmesh.ops.triangulate(bm, faces=bm.faces)
+                bm.to_mesh(me)
+                bm.free()
+
+                me.calc_normals_split()
+
+                object_name = obj.name.upper().replace(" ", "_")
+
+                if self.use_vertex_indexing:
+                    vertex_count = len(me.vertices);
+                    fw('const GLuint %s_VERTEX_COUNT = %d;\n' % (object_name, vertex_count))
+                    fw('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (object_name, object_name))
+
+                    #for i in range(vertex_count - 1):
+                    #   vertex = me.vertices[i]
+                    #    #       vertex position     vertex color          normal           texture
+                    #    fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}},\n', vertex)
+
+                    #last_vertex = me.vertices[vertex_count - 1]
+                    #fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}\n};\n\n', last_vertex)
+
+                    vertex_count = len(me.vertices);
+                    for i, vertex in enumerate(me.vertices):
+                        #       vertex position           vertex color             normal           texture
+                        fw('\t{{%.6f, %.6f, %.6f}, {%.3f, %.3f, %.3f, %.3f}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}' % (
+                            vertex.co[0], vertex.co[1], vertex.co[2], 0.0, 0.0, 0.0, 1.0,
+                            vertex.normal[0], vertex.normal[1], vertex.normal[2], 0.0, 0.0))
+                        if i < vertex_count - 1:
+                            fw(',\n')
+                        else:
+                            fw('\n};\n\n')
+
+                    # loops[l_idx].normal
+                    # textures = me.uv_textures[:]
+
+                    # GLubyte
+                    # indices[36] = {0, 1, 2, 0, 2, 3,
+                    #                0, 3, 4, 0, 4, 5,
+                    #                0, 5, 6, 0, 6, 1,
+                    #                7, 6, 1, 7, 1, 2,
+                    #                7, 4, 5, 7, 5, 6,
+                    #                7, 2, 3, 7, 3, 4};
+
+                    indices_count = 0
+                    for poly in me.polygons:
+                        indices_count += poly.loop_total
+
+                    fw('const GLuint %s_INDICES_COUNT = %d;\n' % (object_name, indices_count))
+                    fw('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % (object_name, object_name))
+
+                    polygons_count = len(me.polygons);
+                    for i, polygon in enumerate(me.polygons):
+                        array = []
+                        for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                            array.append(str(me.loops[loop_index].vertex_index))
+
+                        fw('\t%s' % ', '.join(array))
+
+                        if i < polygons_count - 1:
+                            fw(',\n')
+                        else:
+                            fw('\n};\n\n')
+                else:
+                    vertex_count = 0
+                    for poly in me.polygons:
+                        vertex_count += poly.loop_total
+
+                    fw('const GLuint %s_VERTEX_COUNT = %d;\n' % (object_name, vertex_count))
+                    fw('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (object_name, object_name))
+
+                    vertex_counter = 0
+                    for poly in me.polygons:
+                        for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
+                            vertex_counter += 1
+                            vertex = me.vertices[me.loops[loop_index].vertex_index]
+                            fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}' % (
+                                vertex.co[0], vertex.co[1], vertex.co[2], 0.0, 0.0, 0.0, 1.0,
+                                vertex.normal[0], vertex.normal[1], vertex.normal[2], 0.0, 0.0))
+
+                            if vertex_counter < vertex_count - 1:
+                                fw(',\n')
+                            else:
+                                fw('\n};\n\n')
+
+        return {'FINISHED'}
+'''
         
 def name_compat(name):
     if name is None:
