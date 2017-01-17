@@ -1113,21 +1113,22 @@ def export_mesh(mesh, file, **kwargs):
         bm.to_mesh(mesh)
         bm.free()
 
+    mesh.calc_normals_split()
     mesh_name = mesh.name.upper().replace(" ", "_")
 
     file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % mesh_name, len(mesh.vertices))
     file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % mesh_name, mesh_name)
 
     for vertex in mesh.vertices:
-        #       vertex position     vertex color          normal           texture
         file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
-                       {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}}' %
-                   {"pos_x": vertex.x,"pos_y": vertex.y,"pos_z": vertex.z,
-                    "color_r": ,"color_g": ,"color_b": ,"color_a": ,
-                    "normal_x": ,"normal_y": ,"normal_z": ,
-                    "texture_u": ,"texture_v":})
+                       {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
+                   {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
+                    "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
+                    "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
+                    "texture_u": 0.0, "texture_v": 0.0})
 
-    file.write('}\n')
+    file.seek(-1, os.SEEK_CUR)
+    file.write('\n}\n')
 
 
 def export_curv(curve, file, **kwargs):
