@@ -22,6 +22,7 @@ bl_info = {
     
 import os
 import bpy
+import math
 import mathutils
 import bpy_extras.io_utils
 
@@ -139,6 +140,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=False,
     )
 
+    prop_use_vertex_indices = BoolProperty(
+        name="Export vertex indices too",
+        description="",
+        default=False,
+    )
+
 '''
     use_nurbs = BoolProperty(
             name="Write Nurbs",
@@ -167,12 +174,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             description="",
             default=False,
             )
-    keep_vertex_order = BoolProperty(
-            name="Keep Vertex Order",
-            description="",
-            default=False,
-            )
-
+    prop_keep_vertex_order = BoolProperty(
+        name="Keep Vertex Order",
+        description="",
+        default=False,
+    )
     global_scale = FloatProperty(
             name="Scale",
             min=0.01, max=1000.0,
@@ -208,9 +214,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                         continue
 
                     with open(filepath, "w", encoding="utf8", newline="\n") as file:
-                        export_mesh(mesh, file, {'use_global_matrix': self.prop_use_global_matrix,
-                                                 'global_matrix': global_matrix,
-                                                 'use_triangules': self.prop_use_triangles})
+                        export_mesh(mesh, file, {'use_global_matrix':  self.prop_use_global_matrix,
+                                                 'global_matrix':      global_matrix,
+                                                 'use_triangules':     self.prop_use_triangles,
+                                                 'use_vertex_indices': self.prop_use_vertex_indices})
             else:
                 with open(filepath, "w", encoding="utf8", newline="\n") as file:
                     for obj in objects:
@@ -219,9 +226,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                         except RuntimeError:
                             continue
 
-                        export_mesh(mesh, file, {'use_global_matrix': self.prop_use_global_matrix,
-                                                 'global_matrix': global_matrix,
-                                                 'use_triangules': self.prop_use_triangles})
+                        export_mesh(mesh, file, {'use_global_matrix':  self.prop_use_global_matrix,
+                                                 'global_matrix':      global_matrix,
+                                                 'use_triangules':     self.prop_use_triangles,
+                                                 'use_vertex_indices': self.prop_use_vertex_indices})
 
 
             '''
@@ -314,118 +322,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    "\tGLfloat texturePosition[2];\n"
                    "}Vertex;\n\n")
 
-            # Tell the obj file what material file to use.
-            # if materials_export_type == 'FM':
-            #    mtlfilepath = os.path.splitext(filepath)[0] + ".mtl"
-            #    # filepath can contain non utf8 chars, use repr
-            #    fw('//mtllib %s\n' % repr(os.path.basename(mtlfilepath))[1:-1])
-
-            for obj in objects:
-                if obj.parent and obj.parent.dupli_type in {'VERTS', 'FACES'}:
-                    continue
-
-                # if use_nurbs and object.type == 'CURVE':
-                #   points = object.data.splines.points
-                #    continue
-
-                try:
-                    me = obj.to_mesh(scene, self.use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                except RuntimeError:
-                    continue
-
-                if self.export_as_scene:
-                    me.transform(global_matrix * obj.matrix_world)
-
-                # Triangulation
-                import bmesh
-                bm = bmesh.new()
-
-                bm.from_mesh(me)
-                bmesh.ops.triangulate(bm, faces=bm.faces)
-                bm.to_mesh(me)
-                bm.free()
-
-                me.calc_normals_split()
-
-                object_name = obj.name.upper().replace(" ", "_")
-
-                if self.use_vertex_indexing:
-                    vertex_count = len(me.vertices);
-                    fw('const GLuint %s_VERTEX_COUNT = %d;\n' % (object_name, vertex_count))
-                    fw('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (object_name, object_name))
-
-                    #for i in range(vertex_count - 1):
-                    #   vertex = me.vertices[i]
-                    #    #       vertex position     vertex color          normal           texture
-                    #    fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}},\n', vertex)
-
-                    #last_vertex = me.vertices[vertex_count - 1]
-                    #fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}\n};\n\n', last_vertex)
-
-                    vertex_count = len(me.vertices);
-                    for i, vertex in enumerate(me.vertices):
-                        #       vertex position           vertex color             normal           texture
-                        fw('\t{{%.6f, %.6f, %.6f}, {%.3f, %.3f, %.3f, %.3f}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}' % (
-                            vertex.co[0], vertex.co[1], vertex.co[2], 0.0, 0.0, 0.0, 1.0,
-                            vertex.normal[0], vertex.normal[1], vertex.normal[2], 0.0, 0.0))
-                        if i < vertex_count - 1:
-                            fw(',\n')
-                        else:
-                            fw('\n};\n\n')
-
-                    # loops[l_idx].normal
-                    # textures = me.uv_textures[:]
-
-                    # GLubyte
-                    # indices[36] = {0, 1, 2, 0, 2, 3,
-                    #                0, 3, 4, 0, 4, 5,
-                    #                0, 5, 6, 0, 6, 1,
-                    #                7, 6, 1, 7, 1, 2,
-                    #                7, 4, 5, 7, 5, 6,
-                    #                7, 2, 3, 7, 3, 4};
-
-                    indices_count = 0
-                    for poly in me.polygons:
-                        indices_count += poly.loop_total
-
-                    fw('const GLuint %s_INDICES_COUNT = %d;\n' % (object_name, indices_count))
-                    fw('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % (object_name, object_name))
-
-                    polygons_count = len(me.polygons);
-                    for i, polygon in enumerate(me.polygons):
-                        array = []
-                        for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
-                            array.append(str(me.loops[loop_index].vertex_index))
-
-                        fw('\t%s' % ', '.join(array))
-
-                        if i < polygons_count - 1:
-                            fw(',\n')
-                        else:
-                            fw('\n};\n\n')
-                else:
-                    vertex_count = 0
-                    for poly in me.polygons:
-                        vertex_count += poly.loop_total
-
-                    fw('const GLuint %s_VERTEX_COUNT = %d;\n' % (object_name, vertex_count))
-                    fw('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (object_name, object_name))
-
-                    vertex_counter = 0
-                    for poly in me.polygons:
-                        for loop_index in range(poly.loop_start, poly.loop_start + poly.loop_total):
-                            vertex_counter += 1
-                            vertex = me.vertices[me.loops[loop_index].vertex_index]
-                            fw('\t{{%.6f, %.6f, %.6f}, {%d, %d, %d, %d}, {%.6f, %.6f, %.6f}, {%.3f, %.3f}}' % (
-                                vertex.co[0], vertex.co[1], vertex.co[2], 0.0, 0.0, 0.0, 1.0,
-                                vertex.normal[0], vertex.normal[1], vertex.normal[2], 0.0, 0.0))
-
-                            if vertex_counter < vertex_count - 1:
-                                fw(',\n')
-                            else:
-                                fw('\n};\n\n')
-
-        return {'FINISHED'}
 '''
         
 def name_compat(name):
@@ -1097,10 +993,12 @@ def write_file(filepath, objects, scene,
         # copy all collected files.
         bpy_extras.io_utils.path_reference_copy(copy_set)
 
+
 def export_mesh(mesh, file, **kwargs):
     if kwargs.use_global_matrix:
         mesh.transform(kwargs.global_matrix * mesh.matrix_world)
 
+    # Триангуляция полигонов
     if kwargs.use_triangles:
         import copy
         import bmesh
@@ -1113,22 +1011,84 @@ def export_mesh(mesh, file, **kwargs):
         bm.to_mesh(mesh)
         bm.free()
 
+    # Считаем нормали и получаем имя объекта
     mesh.calc_normals_split()
     mesh_name = mesh.name.upper().replace(" ", "_")
 
+    # Записываем в файл определение объекта в виде структуры
+    # Объекление не зависит от значения 'keep_vertex_order'
     file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % mesh_name, len(mesh.vertices))
     file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % mesh_name, mesh_name)
 
-    for vertex in mesh.vertices:
-        file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
-                       {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
-                   {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
-                    "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
-                    "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
-                    "texture_u": 0.0, "texture_v": 0.0})
+    if kwargs.use_vertex_indices:
+        # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
+        # так же необходимо экспортировать и список индексав этих вершин
+        for vertex in mesh.vertices:
+            file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
+                           {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
+                       {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
+                        "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
+                        "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
+                        "texture_u": 0.0, "texture_v": 0.0})
 
-    file.seek(-1, os.SEEK_CUR)
-    file.write('\n}\n')
+        file.seek(-1, os.SEEK_CUR)
+        file.write('\n}\n\n')
+
+        # loops[l_idx].normal
+        # textures = me.uv_textures[:]
+
+        indices_count = 0
+        for polygon in mesh.polygons:
+            indices_count += polygon.loop_total
+
+        file.write('const GLuint %s_INDICES_COUNT = %d;\n' % (mesh_name, indices_count))
+        file.write('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % (mesh_name, mesh_name))
+
+        # Этот ключ задает относительно симметричный вывод индексов типа:
+        # GLubyte
+        # indices[36] = {0, 1, 2, 0, 2, 3,
+        #                0, 3, 4, 0, 4, 5,
+        #                0, 5, 6, 0, 6, 1,
+        #                7, 6, 1, 7, 1, 2,
+        #                7, 4, 5, 7, 5, 6,
+        #                7, 2, 3, 7, 3, 4};
+        if kwargs.symmetrical_indeces_output:
+            array = []
+            indices_in_row = int(math.sqrt(indices_count))
+            for polygon in mesh.polygons:
+                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                    array.append(str(mesh.loops[loop_index].vertex_index))
+
+                if len(array) >= indices_in_row and len(array) <= 16: #(80 символов - длинна строки / ~3 цифры + запятая и пробел )
+                    file.write('\t%s,\n' % ', '.join(array))
+                    array = []
+        else:
+            # Иначе под индексы вершин каждого полигона отведена своя строка
+            for polygon in mesh.polygons:
+                array = []
+                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                    array.append(str(mesh.loops[loop_index].vertex_index))
+
+                file.write('\t%s,\n' % ', '.join(array))
+
+        file.seek(-1, os.SEEK_CUR)
+        file.write('\n}\n\n')
+    else:
+        # Если не сохранять порядок вергин, то вершины будет сгруппированны по полигонам,
+        # к которым они относятся. Это приведет к дублированию вершин
+        for polygon in mesh.polygons:
+            for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
+                file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
+                               {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
+                           {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
+                            "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
+                            "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
+                            "texture_u": 0.0, "texture_v": 0.0})
+            file.write('\t//Polygon %d' % polygon.index)
+
+        file.seek(-1, os.SEEK_CUR)
+        file.write('\n}\n\n')
 
 
 def export_curv(curve, file, **kwargs):

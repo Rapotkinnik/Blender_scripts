@@ -90,3 +90,6 @@ ENV/
 
 # PySharm IDE settings
 .idea
+
+# Blender API
+pypredef/
