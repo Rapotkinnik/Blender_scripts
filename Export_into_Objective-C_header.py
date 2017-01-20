@@ -10,7 +10,7 @@
 bl_info = {
     'name': 'Objective-C header',
     'author': 'Nikolay Rapotkin',
-    'version': (0, 0, 1),
+    'version': (0, 0, 2),
     'blender': (2, 74, 0),
     'location': 'File > Export',
     'description': 'Export meshes into Objective-C header for OpenGL ES painting',
@@ -44,7 +44,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         options={'HIDDEN'},
     )
 
-'''
+    '''
     materials_export_type = EnumProperty(
             name="Materials export type",
             description="Export materials by",
@@ -71,7 +71,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    ('IA', "Interpolation", "Calculate interpolation function for each vertex")),
             default='NA',
             )
-'''
+    '''
+
     prop_use_selection = BoolProperty(
         name="Selection Only",
         description="Export selected objects only",
@@ -91,8 +92,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=True,
     )
 
-'''
-
+    '''
     # extra data group
     use_edges = BoolProperty(
             name="Include Edges",
@@ -120,7 +120,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             description="Write out the active UV coordinates",
             default=True,
             )
-'''
+    '''
 
     prop_use_triangles = BoolProperty(
         name="Triangulate Faces",
@@ -134,7 +134,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=False,
     )
 
-    prop_use_objet_as_file_export = BoolProperty(
+    prop_export_object_as_file = BoolProperty(
         name="Export objects separately",
         description="Export each object to separate file",
         default=False,
@@ -143,10 +143,16 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
     prop_use_vertex_indices = BoolProperty(
         name="Export vertex indices too",
         description="",
-        default=False,
+        default=True,
     )
 
-'''
+    prop_use_symmetrical_indices_output = BoolProperty(
+        name="Export indices as symmetrical square",
+        description="Export vertex indices more pretty (as symmetrical square)",
+        default=True,
+    )
+
+    '''
     use_nurbs = BoolProperty(
             name="Write Nurbs",
             description="Write nurbs curves as OBJ nurbs rather than converting to geometry",
@@ -179,12 +185,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         description="",
         default=False,
     )
+    '''
     global_scale = FloatProperty(
             name="Scale",
             min=0.01, max=1000.0,
             default=1.0,
             )
-'''
 
     path_mode = path_reference_mode
 
@@ -194,136 +200,166 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         from mathutils import Matrix                                         
         global_matrix = Matrix.Scale(self.global_scale, 4) * axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
 
-        with ProgressReport(context.window_manager) as progress:
-            base_name, ext = os.path.splitext(str(self.filepath))
-            context_name = [base_name, '', '', ext]  # Base name, scene name, frame number, extension
-
-            scene = context.scene
-
-            # Exit edit mode before exporting, so current object states are exported properly.
-            if bpy.ops.object.mode_set.poll():
-                bpy.ops.object.mode_set(mode='OBJECT')
-
-            objects = context.selected_objects if self.prop_use_selection else scene.objects
-
-            if self.prop_use_objet_as_file_export:
-                for obj in objects:
-                    try:
-                        mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                    except RuntimeError:
-                        continue
-
-                    with open(filepath, "w", encoding="utf8", newline="\n") as file:
-                        export_mesh(mesh, file, {'use_global_matrix':  self.prop_use_global_matrix,
-                                                 'global_matrix':      global_matrix,
-                                                 'use_triangules':     self.prop_use_triangles,
-                                                 'use_vertex_indices': self.prop_use_vertex_indices})
-            else:
-                with open(filepath, "w", encoding="utf8", newline="\n") as file:
-                    for obj in objects:
-                        try:
-                            mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                        except RuntimeError:
-                            continue
-
-                        export_mesh(mesh, file, {'use_global_matrix':  self.prop_use_global_matrix,
-                                                 'global_matrix':      global_matrix,
-                                                 'use_triangules':     self.prop_use_triangles,
-                                                 'use_vertex_indices': self.prop_use_vertex_indices})
-
-
-            '''
-            orig_frame = scene.frame_current
-
-            # Export an animation?
-            if self.animation_export_type == 'MA':
-                scene_frames = range(scene.frame_start, scene.frame_end + 1)  # Up to and including the end frame.
-
-            if self.animation_export_type == 'NA':
-                scene_frames = [orig_frame]  # Dont export an animation.
-
-            # Loop through all frames in the scene and export.
-            progress.enter_substeps(len(scene_frames))
-            for frame in scene_frames:
-                if self.animation_export_type == 'MA':  # Add frame to the filepath.
-                    context_name[2] = '_%.6d' % frame
-
-                scene.frame_set(frame, 0.0)
-                if self.use_selection:
-                    objects = context.selected_objects
-                else:
-                    objects = scene.objects
-
-                full_path = ''.join(context_name)
-
-                # erm... bit of a problem here, this can overwrite files when exporting frames. not too bad.
-                # EXPORT THE FILE.
-                progress.enter_substeps(1)
-                write_file(full_path, objects, scene,
-                           self.use_triangles,
-                           self.use_edges,
-                           self.use_smooth_groups,
-                           self.use_smooth_groups_bitflags,
-                           self.use_normals,
-                           self.use_uvs,
-                           self.materials_export_type,
-                           self.use_mesh_modifiers,
-                           self.use_blen_objects,
-                           self.group_by_object,
-                           self.group_by_material,
-                           self.keep_vertex_order,
-                           self.use_vertex_groups,
-                           self.use_nurbs,
-                           global_matrix,
-                           self.path_mode,
-                           progress,
-                           )
-                progress.leave_substeps()
-
-            scene.frame_set(orig_frame, 0.0)
-            '''
-            progress.leave_substeps()
-            
-        return {'FINISHED'}
-   
-'''   
-    def execute(self, context):
-        from mathutils import Matrix                                         
-        global_matrix = Matrix.Scale(self.global_scale, 4) * axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
-        if global_matrix is None:
-            global_matrix = mathutils.Matrix()
-
         scene = context.scene
 
         # Exit edit mode before exporting, so current object states are exported properly.
         if bpy.ops.object.mode_set.poll():
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        objects = context.selected_objects if self.use_selection else scene.objects
+        objects = context.selected_objects if self.prop_use_selection else scene.objects
 
-        with open(self.filepath, "w", encoding="utf8", newline="\n") as f:
-            fw = f.write
+        if self.prop_export_object_as_file:
+            for obj in objects:
+                try:
+                    mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                    mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
+                except RuntimeError:
+                    continue
 
-            if self.include_vertex_header:
-                fw("#import \"%s\"\n\n" % self.include_vertex_header)
-            elif self.use_normals:
-                fw("typedef struct\n"
-                   "{\n"
-                   "\tGLfloat vertexPosition[3];\n"
-                   "\tGLfloat vertexColor[4];\n"
-                   "\tGLfloat normalDirection[3];\n"
-                   "\tGLfloat texturePosition[2];\n"
-                   "}Vertex;\n\n")
+                path, _ = os.path.split(self.path)
+                object_name = obj.name.upper().replace(" ", "_")
+                with open(os.path.join(path, '.'.join(object_name, 'h')), "w+t", encoding="utf8", newline="\n") as file:
+                    self.prepare_file(file)
+                    self.export_mesh(mesh, file, global_matrix)
+
+        else:
+            with open(self.filepath, "w+t", encoding="utf8", newline="\n") as file:
+                self.prepare_file(file)
+                for obj in objects:
+                    try:
+                        mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                        mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
+                    except RuntimeError:
+                        continue
+
+                    self.export_mesh(mesh, file, global_matrix)
+
+        return {'FINISHED'}
+
+    @staticmethod
+    def prepare_file(file, use_colors=True, use_normals=True, use_textures=True):
+        structure = '\tGLfloat vertexPosition[3];\n'
+        if use_colors:
+            structure += '\tGLfloat vertexColor[4];\n'
+        if use_normals:
+            structure += '\tGLfloat normalDirection[3];\n'
+        if use_textures:
+            structure += '\tGLfloat texturePosition[2];\n'
+
+        file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
+
+    def export_mesh(self, mesh, file, global_matrix=mathutils.Matrix(), use_colors=True, use_normals=True, use_textures=True):
+        if self.prop_use_global_matrix:
+            mesh.transform(global_matrix * mesh.matrix_world)
+
+        # Триангуляция полигонов
+        if self.prop_use_triangles:
+            import copy
+            import bmesh
+
+            bm = bmesh.new()
+            mesh = copy.deepcopy(mesh)  # TODO: Подумать, нужно ли удалять это объект!
+
+            bm.from_mesh(mesh)
+            bmesh.ops.triangulate(bm, faces=bm.faces)
+            bm.to_mesh(mesh)
+            bm.free()
+
+        # Считаем нормали и получаем имя объекта
+        mesh.calc_normals_split()
+        mesh_name = mesh.name.upper().replace(" ", "_")
+
+        if self.prop_use_vertex_indices:
+            # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
+            # так же необходимо экспортировать и список индексав этих вершин
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, len(mesh.vertices)))
+            file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+
+            for vertex in mesh.vertices:
+                data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
+                if use_colors:
+                    data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
+                if use_normals:
+                    data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
+                if use_textures:
+                    data += ', {%.3f, %.3f}' % (0.0, 0.0)
+
+                file.write('\t{%s},\n' % data)
+
+            file.seek(file.tell()-2, os.SEEK_SET)
+            file.write('\n}\n\n')
+
+            # loops[l_idx].normal
+            # textures = me.uv_textures[:]
+
+            indices_count = 0
+            for polygon in mesh.polygons:
+                indices_count += polygon.loop_total
+
+            file.write('const GLuint %s_INDICES_COUNT = %d;\n' % ((mesh_name, indices_count)))
+            file.write('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % ((mesh_name, mesh_name)))
+
+            # Этот ключ задает относительно симметричный вывод индексов типа:
+            # GLubyte
+            # indices[36] = {0, 1, 2, 0, 2, 3,
+            #                0, 3, 4, 0, 4, 5,
+            #                0, 5, 6, 0, 6, 1,
+            #                7, 6, 1, 7, 1, 2,
+            #                7, 4, 5, 7, 5, 6,
+            #                7, 2, 3, 7, 3, 4};
+            if self.prop_use_symmetrical_indices_output:
+                array = []
+                indices_in_row = int(math.sqrt(indices_count))
+                for polygon in mesh.polygons:
+                    for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                        array.append(str(mesh.loops[loop_index].vertex_index))
+
+                    if indices_in_row <= len(array) <= 16:  # (80 символов - длинна строки / ~3 цифры + запятая и пробел )
+                        file.write('\t%s,\n' % ', '.join(array))
+                        array = []
             else:
-                fw("typedef struct\n"
-                   "{\n"
-                   "\tGLfloat vertexPosition[3];\n"
-                   "\tGLfloat vertexColor[4];\n"
-                   "\tGLfloat texturePosition[2];\n"
-                   "}Vertex;\n\n")
+                # Иначе под индексы вершин каждого полигона отведена своя строка
+                for polygon in mesh.polygons:
+                    array = []
+                    for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                        array.append(str(mesh.loops[loop_index].vertex_index))
 
-'''
-        
+                    file.write('\t%s,\n' % ', '.join(array))
+
+            file.seek(file.tell()-2, os.SEEK_SET)
+            file.write('\n}\n\n')
+        else:
+            # Если не сохранять порядок вергин, то вершины будет сгруппированны по полигонам,
+            # к которым они относятся. Это приведет к дублированию вершин
+            vertex_count = 0
+            for polygon in mesh.polygons:
+                vertex_count += polygon.loop_total
+
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
+            file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+
+            for polygon in mesh.polygons:
+                file.write('\t// Polygon %d\n' % polygon.index)
+                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                    vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
+
+                    data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
+                    if use_colors:
+                        data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
+                    if use_normals:
+                        data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
+                    if use_textures:
+                        data += ', {%.3f, %.3f}' % (0.0, 0.0)
+
+                    file.write('\t{%s},\n' % data)
+
+            file.seek(file.tell()-2, os.SEEK_SET)
+            file.write('\n}\n\n')
+
+    def export_curv(self, curve, file, **kwargs):
+        print(kwargs)
+
+
 def name_compat(name):
     if name is None:
         return 'None'
@@ -992,107 +1028,6 @@ def write_file(filepath, objects, scene,
 
         # copy all collected files.
         bpy_extras.io_utils.path_reference_copy(copy_set)
-
-
-def export_mesh(mesh, file, **kwargs):
-    if kwargs.use_global_matrix:
-        mesh.transform(kwargs.global_matrix * mesh.matrix_world)
-
-    # Триангуляция полигонов
-    if kwargs.use_triangles:
-        import copy
-        import bmesh
-
-        bm = bmesh.new()
-        mesh = copy.deepcopy(mesh) #TODO: Подумать, нужно ли удалять это объект!
-
-        bm.from_mesh(mesh)
-        bmesh.ops.triangulate(bm, faces=bm.faces)
-        bm.to_mesh(mesh)
-        bm.free()
-
-    # Считаем нормали и получаем имя объекта
-    mesh.calc_normals_split()
-    mesh_name = mesh.name.upper().replace(" ", "_")
-
-    # Записываем в файл определение объекта в виде структуры
-    # Объекление не зависит от значения 'keep_vertex_order'
-    file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % mesh_name, len(mesh.vertices))
-    file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % mesh_name, mesh_name)
-
-    if kwargs.use_vertex_indices:
-        # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
-        # так же необходимо экспортировать и список индексав этих вершин
-        for vertex in mesh.vertices:
-            file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
-                           {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
-                       {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
-                        "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
-                        "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
-                        "texture_u": 0.0, "texture_v": 0.0})
-
-        file.seek(-1, os.SEEK_CUR)
-        file.write('\n}\n\n')
-
-        # loops[l_idx].normal
-        # textures = me.uv_textures[:]
-
-        indices_count = 0
-        for polygon in mesh.polygons:
-            indices_count += polygon.loop_total
-
-        file.write('const GLuint %s_INDICES_COUNT = %d;\n' % (mesh_name, indices_count))
-        file.write('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % (mesh_name, mesh_name))
-
-        # Этот ключ задает относительно симметричный вывод индексов типа:
-        # GLubyte
-        # indices[36] = {0, 1, 2, 0, 2, 3,
-        #                0, 3, 4, 0, 4, 5,
-        #                0, 5, 6, 0, 6, 1,
-        #                7, 6, 1, 7, 1, 2,
-        #                7, 4, 5, 7, 5, 6,
-        #                7, 2, 3, 7, 3, 4};
-        if kwargs.symmetrical_indeces_output:
-            array = []
-            indices_in_row = int(math.sqrt(indices_count))
-            for polygon in mesh.polygons:
-                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
-                    array.append(str(mesh.loops[loop_index].vertex_index))
-
-                if len(array) >= indices_in_row and len(array) <= 16: #(80 символов - длинна строки / ~3 цифры + запятая и пробел )
-                    file.write('\t%s,\n' % ', '.join(array))
-                    array = []
-        else:
-            # Иначе под индексы вершин каждого полигона отведена своя строка
-            for polygon in mesh.polygons:
-                array = []
-                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
-                    array.append(str(mesh.loops[loop_index].vertex_index))
-
-                file.write('\t%s,\n' % ', '.join(array))
-
-        file.seek(-1, os.SEEK_CUR)
-        file.write('\n}\n\n')
-    else:
-        # Если не сохранять порядок вергин, то вершины будет сгруппированны по полигонам,
-        # к которым они относятся. Это приведет к дублированию вершин
-        for polygon in mesh.polygons:
-            for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
-                vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
-                file.write('\t{{%.6(pos_x)f, %.6(pos_y)f, %.6(pos_z)f}, {%(color_r)d, %(color_g)d, %(color_b)d, %(color_a)d},\
-                               {%.6(normal_x)f, %.6(normal_y)f, %.6(normal_z)f}, {%.3(texture_u)f, %.3(texture_v)f}},' %
-                           {"pos_x": vertex.co[0], "pos_y": vertex.co[1], "pos_z": vertex.co[2],
-                            "color_r": 0.0, "color_g": 0.0, "color_b": 0.0, "color_a": 1.0,
-                            "normal_x": vertex.normal[0], "normal_y": vertex.normal[1], "normal_z": vertex.normal[2],
-                            "texture_u": 0.0, "texture_v": 0.0})
-            file.write('\t//Polygon %d' % polygon.index)
-
-        file.seek(-1, os.SEEK_CUR)
-        file.write('\n}\n\n')
-
-
-def export_curv(curve, file, **kwargs):
-    print(kwargs)
 
 
 def menu_func_export(self, context):
