@@ -152,6 +152,24 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=True,
     )
 
+    prop_export_color = BoolProperty(
+        name="Export vertex color",
+        description="",
+        default=True,
+    )
+
+    prop_export_normal = BoolProperty(
+        name="Export vertex normal",
+        description="",
+        default=True,
+    )
+
+    prop_export_texture = BoolProperty(
+        name="Export texture coordinates",
+        description="",
+        default=True,
+    )
+
     '''
     use_nurbs = BoolProperty(
             name="Write Nurbs",
@@ -208,49 +226,54 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         objects = context.selected_objects if self.prop_use_selection else scene.objects
 
+        '''
+        exported_objects = []
+        for obj in objects:
+            try:
+                mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
+                if use_vertex_groups:
+                    for group in mesh.
+                else:
+                    exported_objects.append(mesh)
+            except RuntimeError:
+                continue
+        '''
+
         if self.prop_export_object_as_file:
             for obj in objects:
-                try:
-                    mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                    mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
-                except RuntimeError:
-                    continue
-
-                path, _ = os.path.split(self.path)
-                object_name = obj.name.upper().replace(" ", "_")
-                with open(os.path.join(path, '.'.join(object_name, 'h')), "w+t", encoding="utf8", newline="\n") as file:
+                path, _ = os.path.split(self.filepath)
+                object_name = obj.name.replace(' ', '_').replace('.', '_')
+                with open(os.path.join(path, '%s.h' % object_name), "w+t", encoding="utf8", newline="\n") as file:
                     self.prepare_file(file)
-                    self.export_mesh(mesh, file, global_matrix)
-
+                    self.export_mesh(obj, scene, file, global_matrix)
         else:
             with open(self.filepath, "w+t", encoding="utf8", newline="\n") as file:
                 self.prepare_file(file)
                 for obj in objects:
-                    try:
-                        mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                        mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
-                    except RuntimeError:
-                        continue
-
-                    self.export_mesh(mesh, file, global_matrix)
+                    self.export_mesh(obj, scene, file, global_matrix)
 
         return {'FINISHED'}
 
-    @staticmethod
-    def prepare_file(file, use_colors=True, use_normals=True, use_textures=True):
+    def prepare_file(self, file):
         structure = '\tGLfloat vertexPosition[3];\n'
-        if use_colors:
+        if self.prop_export_color:
             structure += '\tGLfloat vertexColor[4];\n'
-        if use_normals:
+        if self.prop_export_normal:
             structure += '\tGLfloat normalDirection[3];\n'
-        if use_textures:
+        if self.prop_export_texture:
             structure += '\tGLfloat texturePosition[2];\n'
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
 
-    def export_mesh(self, mesh, file, global_matrix=mathutils.Matrix(), use_colors=True, use_normals=True, use_textures=True):
+    def export_mesh(self, object, scene, file, global_matrix=mathutils.Matrix()):
+        try:
+            mesh = object.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+        except RuntimeError:
+            return
+
         if self.prop_use_global_matrix:
-            mesh.transform(global_matrix * mesh.matrix_world)
+            mesh.transform(global_matrix * object.matrix_world)
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
@@ -258,8 +281,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             import bmesh
 
             bm = bmesh.new()
-            mesh = copy.deepcopy(mesh)  # TODO: Подумать, нужно ли удалять это объект!
-
             bm.from_mesh(mesh)
             bmesh.ops.triangulate(bm, faces=bm.faces)
             bm.to_mesh(mesh)
@@ -267,7 +288,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         # Считаем нормали и получаем имя объекта
         mesh.calc_normals_split()
-        mesh_name = mesh.name.upper().replace(" ", "_")
+        mesh_name = object.name.upper().replace(' ', '_').replace('.', '_')
 
         if self.prop_use_vertex_indices:
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
@@ -277,11 +298,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
-                if use_colors:
+                if self.prop_export_color:
                     data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
-                if use_normals:
+                if self.prop_export_normal:
                     data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
-                if use_textures:
+                if self.prop_export_texture:
                     data += ', {%.3f, %.3f}' % (0.0, 0.0)
 
                 file.write('\t{%s},\n' % data)
@@ -310,13 +331,14 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             if self.prop_use_symmetrical_indices_output:
                 array = []
                 indices_in_row = int(math.sqrt(indices_count))
+                max_indices_in_row = indices_in_row if indices_in_row < 20 else 20
                 for polygon in mesh.polygons:
                     for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
                         array.append(str(mesh.loops[loop_index].vertex_index))
 
-                    if indices_in_row <= len(array) <= 16:  # (80 символов - длинна строки / ~3 цифры + запятая и пробел )
-                        file.write('\t%s,\n' % ', '.join(array))
-                        array = []
+                    if len(array) >= max_indices_in_row:
+                        file.write('\t%s,\n' % ', '.join(array[0:max_indices_in_row]))
+                        array = array[max_indices_in_row:0]
             else:
                 # Иначе под индексы вершин каждого полигона отведена своя строка
                 for polygon in mesh.polygons:
@@ -344,11 +366,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
 
                     data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
-                    if use_colors:
+                    if self.prop_export_color:
                         data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
-                    if use_normals:
+                    if self.prop_export_normal:
                         data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
-                    if use_textures:
+                    if self.prop_export_texture:
                         data += ', {%.3f, %.3f}' % (0.0, 0.0)
 
                     file.write('\t{%s},\n' % data)
