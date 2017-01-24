@@ -263,6 +263,28 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 continue
         '''
 
+        main_file_name  = os.path.basename(self.filepath)
+        with open(self.filepath, "w+t", encoding="utf8", newline="\n") as main_file:
+            self.prepare_file(main_file)
+            for obj in objects:
+                try:
+                    mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                    mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
+
+                    if self.prop_use_global_matrix:
+                        mesh.transform(global_matrix * obj.matrix_world)
+                except RuntimeError:
+                    continue
+
+                if self.prop_export_object_as_file:
+                    path, _ = os.path.split(self.filepath)
+                    with open(os.path.join(path, '%s.h' % mesh.name.lower()), "w+t", encoding="utf8", newline="\n") as file:
+                        file.write('#import "%s"\n\n' % main_file_name)
+                        self.export_mesh(mesh, file)
+                else:
+                    self.export_mesh(mesh, main_file)
+
+        '''
         if self.prop_export_object_as_file:
             for obj in objects:
                 path, _ = os.path.split(self.filepath)
@@ -275,6 +297,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 self.prepare_file(file)
                 for obj in objects:
                     self.export_mesh(obj, scene, file, global_matrix)
+        '''
 
         return {'FINISHED'}
 
@@ -289,14 +312,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
 
-    def export_mesh(self, object, scene, file, global_matrix=mathutils.Matrix()):
-        try:
-            mesh = object.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-        except RuntimeError:
-            return
-
-        if self.prop_use_global_matrix:
-            mesh.transform(global_matrix * object.matrix_world)
+    def export_mesh(self, mesh, file):
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
@@ -310,13 +326,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         # Считаем нормали и получаем имя объекта
         mesh.calc_normals_split()
-        mesh_name = object.name.upper().replace(' ', '_').replace('.', '_')
 
         if self.prop_use_vertex_indices:
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
             # так же необходимо экспортировать и список индексав этих вершин
-            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, len(mesh.vertices)))
-            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh.name, len(mesh.vertices)))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh.name, mesh.name))
 
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
@@ -339,8 +354,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 indices_count += polygon.loop_total
 
-            file.write('const GLuint %s_INDEX_COUNT = %d;\n' % (mesh_name, indices_count))
-            file.write('const GLuint %s_INDICES[%s_INDEX_COUNT] = {\n' % (mesh_name, mesh_name))
+            file.write('const GLuint %s_INDEX_COUNT = %d;\n' % (mesh.name, indices_count))
+            file.write('const GLuint %s_INDICES[%s_INDEX_COUNT] = {\n' % (mesh.name, mesh.name))
 
             # Этот ключ задает относительно симметричный вывод индексов типа:
             # GLubyte
@@ -360,7 +375,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
                     if len(array) >= max_indices_in_row:
                         file.write('\t%s,\n' % ', '.join(array[0:max_indices_in_row]))
-                        array = array[max_indices_in_row:0]
+                        array = array[max_indices_in_row:len(array)]
+
+                if len(array) > 0:
+                    file.write('\t%s,\n' % ', '.join(array[0:max_indices_in_row]))
             else:
                 # Иначе под индексы вершин каждого полигона отведена своя строка
                 for polygon in mesh.polygons:
@@ -379,8 +397,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 vertex_count += polygon.loop_total
 
-            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
-            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh.name, vertex_count))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh.name, mesh.name))
 
             for polygon in mesh.polygons:
                 file.write('\t// Polygon %d\n' % polygon.index)
