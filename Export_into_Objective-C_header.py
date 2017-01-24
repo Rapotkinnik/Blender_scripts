@@ -134,10 +134,19 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=False,
     )
 
+    '''
+    def hide_include_prop(self, context):
+        if self.prop_export_object_as_file:
+            self.global_scale.options = {}
+        else:
+            self.global_scale.options = {'HIDDEN'}
+    '''
+
     prop_export_object_as_file = BoolProperty(
         name="Export objects separately",
         description="Export each object to separate file",
         default=False,
+        #update=hide_include_prop
     )
 
     prop_use_vertex_indices = BoolProperty(
@@ -151,6 +160,20 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         description="Export vertex indices more pretty (as symmetrical square)",
         default=True,
     )
+
+    '''
+    class ExportMeshSettings(bpy.types.PropertyGroup):
+        export_color   = BoolProperty(name="Vertex color", default=True)
+        export_normal  = BoolProperty(name="Vertex normal", default=True)
+        export_texture = BoolProperty(name="Texture coordinates", default=True)
+
+    bpy.utils.register_class(ExportMeshSettings)
+
+    prop_export = PointerProperty(
+        type=ExportMeshSettings,
+        name="Export"
+    )
+    '''
 
     prop_export_color = BoolProperty(
         name="Export vertex color",
@@ -277,7 +300,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
-            import copy
             import bmesh
 
             bm = bmesh.new()
@@ -294,7 +316,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
             # так же необходимо экспортировать и список индексав этих вершин
             file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, len(mesh.vertices)))
-            file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
@@ -308,7 +330,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 file.write('\t{%s},\n' % data)
 
             file.seek(file.tell()-2, os.SEEK_SET)
-            file.write('\n}\n\n')
+            file.write('\n};\n\n')
 
             # loops[l_idx].normal
             # textures = me.uv_textures[:]
@@ -317,8 +339,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 indices_count += polygon.loop_total
 
-            file.write('const GLuint %s_INDICES_COUNT = %d;\n' % ((mesh_name, indices_count)))
-            file.write('const GLubyte %s_INDICES[%s_INDICES_COUNT] = {\n' % ((mesh_name, mesh_name)))
+            file.write('const GLuint %s_INDEX_COUNT = %d;\n' % (mesh_name, indices_count))
+            file.write('const GLuint %s_INDICES[%s_INDEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             # Этот ключ задает относительно симметричный вывод индексов типа:
             # GLubyte
@@ -349,7 +371,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t%s,\n' % ', '.join(array))
 
             file.seek(file.tell()-2, os.SEEK_SET)
-            file.write('\n}\n\n')
+            file.write('\n};\n\n')
         else:
             # Если не сохранять порядок вергин, то вершины будет сгруппированны по полигонам,
             # к которым они относятся. Это приведет к дублированию вершин
@@ -358,7 +380,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 vertex_count += polygon.loop_total
 
             file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
-            file.write('const Vertex %s[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             for polygon in mesh.polygons:
                 file.write('\t// Polygon %d\n' % polygon.index)
@@ -376,7 +398,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t{%s},\n' % data)
 
             file.seek(file.tell()-2, os.SEEK_SET)
-            file.write('\n}\n\n')
+            file.write('\n};\n\n')
 
     def export_curv(self, curve, file, **kwargs):
         print(kwargs)
