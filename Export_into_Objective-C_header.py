@@ -263,13 +263,16 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 continue
         '''
 
-        main_file_name  = os.path.basename(self.filepath)
+        main_file_name = os.path.splitext(os.path.basename(self.filepath))[0]
+
         with open(self.filepath, "w+t", encoding="utf8", newline="\n") as main_file:
+            main_file.write('#ifndef _%s_H_\n' % main_file_name.upper())
+            main_file.write('#define _%s_H_\n\n' % main_file_name.upper())
             self.prepare_file(main_file)
             for obj in objects:
                 try:
                     mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                    mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
+                    mesh_name = obj.name.upper().replace(' ', '_').replace('.', '_')
 
                     if self.prop_use_global_matrix:
                         mesh.transform(global_matrix * obj.matrix_world)
@@ -278,11 +281,16 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
                 if self.prop_export_object_as_file:
                     path, _ = os.path.split(self.filepath)
-                    with open(os.path.join(path, '%s.h' % mesh.name.lower()), "w+t", encoding="utf8", newline="\n") as file:
-                        file.write('#import "%s"\n\n' % main_file_name)
-                        self.export_mesh(mesh, file)
+                    with open(os.path.join(path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as file:
+                        file.write('#ifndef _%s_H_\n' % mesh_name)
+                        file.write('#define _%s_H_\n\n' % mesh_name)
+                        file.write('#include "%s.h"\n\n' % main_file_name)
+                        self.export_mesh(mesh, mesh_name, file)
+                        file.write('#endif  // _%s_H_\n' % mesh_name)
                 else:
-                    self.export_mesh(mesh, main_file)
+                    self.export_mesh(mesh, mesh_name, main_file)
+
+            main_file.write('#endif  // _%s_H_\n' % main_file_name.upper())
 
         '''
         if self.prop_export_object_as_file:
@@ -312,7 +320,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
 
-    def export_mesh(self, mesh, file):
+    def export_mesh(self, mesh, mesh_name, file):
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
@@ -330,8 +338,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         if self.prop_use_vertex_indices:
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
             # так же необходимо экспортировать и список индексав этих вершин
-            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh.name, len(mesh.vertices)))
-            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh.name, mesh.name))
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, len(mesh.vertices)))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
@@ -354,8 +362,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 indices_count += polygon.loop_total
 
-            file.write('const GLuint %s_INDEX_COUNT = %d;\n' % (mesh.name, indices_count))
-            file.write('const GLuint %s_INDICES[%s_INDEX_COUNT] = {\n' % (mesh.name, mesh.name))
+            file.write('const GLuint %s_INDEX_COUNT = %d;\n' % (mesh_name, indices_count))
+            file.write('const GLuint %s_INDICES[%s_INDEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             # Этот ключ задает относительно симметричный вывод индексов типа:
             # GLubyte
@@ -397,8 +405,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 vertex_count += polygon.loop_total
 
-            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh.name, vertex_count))
-            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh.name, mesh.name))
+            file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
+            file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             for polygon in mesh.polygons:
                 file.write('\t// Polygon %d\n' % polygon.index)
