@@ -378,8 +378,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 indices_in_row = int(math.sqrt(indices_count))
                 max_indices_in_row = indices_in_row if indices_in_row < 20 else 20
                 for polygon in mesh.polygons:
-                    for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
-                        array.append(str(mesh.loops[loop_index].vertex_index))
+                    array.extend([str(mesh.loops[loop_index].vertex_index) for loop_index in polygon.loop_indices])
 
                     if len(array) >= max_indices_in_row:
                         file.write('\t%s,\n' % ', '.join(array[0:max_indices_in_row]))
@@ -389,11 +388,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t%s,\n' % ', '.join(array[0:max_indices_in_row]))
             else:
                 # Иначе под индексы вершин каждого полигона отведена своя строка
-                for polygon in mesh.polygons:
-                    array = []
-                    for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
-                        array.append(str(mesh.loops[loop_index].vertex_index))
-
+                array = []
+                for loop_index in polygon.loop_indices:
+                    array.append(str(mesh.loops[loop_index].vertex_index))
                     file.write('\t%s,\n' % ', '.join(array))
 
             file.seek(file.tell()-2, os.SEEK_SET)
@@ -405,17 +402,20 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for polygon in mesh.polygons:
                 vertex_count += polygon.loop_total
 
+            cur_color_layer = mesh.vertex_colors.active
+
             file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
             file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
             for polygon in mesh.polygons:
                 file.write('\t// Polygon %d\n' % polygon.index)
-                for loop_index in range(polygon.loop_start, polygon.loop_start + polygon.loop_total):
+                for loop_index in polygon.loop_indices:
                     vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
 
                     data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
-                    if self.prop_export_color:
-                        data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
+                    if self.prop_export_color and cur_color_layer:
+                        color = cur_color_layer.data[loop_index].color
+                        data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], 1.0)
                     if self.prop_export_normal:
                         data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
                     if self.prop_export_texture:
