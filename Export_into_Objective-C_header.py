@@ -181,6 +181,14 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=True,
     )
 
+    prop_export_as_color_map = BoolProperty(
+        name="Export color as color map",
+        description="Each vertex in mesh can be associated with many colors (color per adjacent polygon).\n"\
+                    "So it can be impossible to export colors correct for every vertex.\n"\
+                    "Unless each vertex associated only with ONE color",
+        default=True,
+    )
+
     prop_export_normal = BoolProperty(
         name="Export vertex normal",
         description="",
@@ -311,7 +319,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
     def prepare_file(self, file):
         structure = '\tGLfloat vertexPosition[3];\n'
-        if self.prop_export_color:
+        if self.prop_export_color and not self.prop_export_as_color_map:
             structure += '\tGLfloat vertexColor[4];\n'
         if self.prop_export_normal:
             structure += '\tGLfloat normalDirection[3];\n'
@@ -343,7 +351,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
-                if self.prop_export_color:
+                if self.prop_export_color and not self.prop_export_as_color_map:
                     data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
                 if self.prop_export_normal:
                     data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
@@ -395,6 +403,23 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             file.seek(file.tell()-2, os.SEEK_SET)
             file.write('\n};\n\n')
+
+            # Export colors map
+            cur_color_layer = mesh.vertex_colors.active
+            if self.prop_export_color and self.prop_export_as_color_map and cur_color_layer:
+
+                file.write('const GLuint %s_COLORS_COUNT = %d;\n' % (mesh_name, indices_count * 4))
+                file.write('const GLfloat %s_COLORS[%s_COLORS_COUNT] = {\n' % (mesh_name, mesh_name))
+
+                for polygon in mesh.polygons:
+                    file.write('\t// Polygon %d\n' % polygon.index)
+                    for loop_index in polygon.loop_indices:
+                        color = cur_color_layer.data[loop_index].color
+                        file.write('\t%.3f, %.3f, %.3f, %.3f,\n' % (color[0], color[1], color[2], 1.0))
+
+                file.seek(file.tell() - 2, os.SEEK_SET)
+                file.write('\n};\n\n')
+
         else:
             # Если не сохранять порядок вергин, то вершины будет сгруппированны по полигонам,
             # к которым они относятся. Это приведет к дублированию вершин
@@ -403,6 +428,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 vertex_count += polygon.loop_total
 
             cur_color_layer = mesh.vertex_colors.active
+            cur_texture_layer = mesh.uv_layers.active
 
             file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, vertex_count))
             file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
@@ -418,13 +444,18 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                         data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], 1.0)
                     if self.prop_export_normal:
                         data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
-                    if self.prop_export_texture:
-                        data += ', {%.3f, %.3f}' % (0.0, 0.0)
+                    if self.prop_export_texture and cur_texture_layer:
+                        texture = cur_texture_layer.data[loop_index].uv
+                        data += ', {%.3f, %.3f}' % (texture[0], texture[1])
 
                     file.write('\t{%s},\n' % data)
 
             file.seek(file.tell()-2, os.SEEK_SET)
             file.write('\n};\n\n')
+
+        # Выводим текстуру в файл
+        if self.prop_export_texture and cur_texture_layer:
+            image = mesh.uv_textures.active.data
 
     def export_curv(self, curve, file, **kwargs):
         print(kwargs)
