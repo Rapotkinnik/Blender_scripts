@@ -249,38 +249,33 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         from mathutils import Matrix                                         
         global_matrix = Matrix.Scale(self.global_scale, 4) * axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
 
-        scene = context.scene
-        scene_name = scene.name.replace(' ', '_').replace('.', '_')
-
         # Exit edit mode before exporting, so current object states are exported properly.
         if bpy.ops.object.mode_set.poll():
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        objects = context.selected_objects if self.prop_use_selection else scene.objects
-
-        '''
-        exported_objects = []
-        for obj in objects:
-            try:
-                mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                mesh.name = obj.name.upper().replace(' ', '_').replace('.', '_')
-                if use_vertex_groups:
-                    for group in mesh.
-                else:
-                    exported_objects.append(mesh)
-            except RuntimeError:
-                continue
-        '''
-
-        main_file_name = os.path.splitext(os.path.basename(self.filepath))[0]
+        scene_name = context.scene.name.replace(' ', '_').replace('.', '_')
+        objects = context.selected_objects if self.prop_use_selection else context.scene.objects
+        dir_path, main_file_name = os.path.split(self.filepath)
+        main_file_name = os.path.splitext(main_file_name)[0]
 
         with open(self.filepath, "w+t", encoding="utf8", newline="\n") as main_file:
             main_file.write('#ifndef _%s_H_\n' % main_file_name.upper())
             main_file.write('#define _%s_H_\n\n' % main_file_name.upper())
-            self.prepare_file(main_file)
+
+            if self.prop_export_object_as_file:
+                resource_file_name = 'resources'
+                resource_file = open(os.path.join(dir_path, resource_file_name + '.h'), "w+t", encoding="utf8", newline="\n")
+                resource_file.write('#ifndef _%s_H_\n' % resource_file_name.upper())
+                resource_file.write('#define _%s_H_\n\n' % resource_file_name.upper())
+            else:
+                resource_file = main_file
+
+            materials = []
+            self.export_structure(resource_file)
+
             for obj in objects:
                 try:
-                    mesh = obj.to_mesh(scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                    mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
                     mesh_name = obj.name.upper().replace(' ', '_').replace('.', '_')
 
                     if self.prop_use_global_matrix:
@@ -288,38 +283,34 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 except RuntimeError:
                     continue
 
+                cur_material = obj.active_material;
+                cur_material_alpha = cur_material.alpha if cur_material else 1.0
+
                 if self.prop_export_object_as_file:
-                    path, _ = os.path.split(self.filepath)
-                    with open(os.path.join(path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as file:
-                        file.write('#ifndef _%s_H_\n' % mesh_name)
-                        file.write('#define _%s_H_\n\n' % mesh_name)
-                        file.write('#include "%s.h"\n\n' % main_file_name)
-                        self.export_mesh(mesh, mesh_name, file)
-                        file.write('#endif  // _%s_H_\n' % mesh_name)
+                    main_file.write('#include "%s.h"\n\n' % mesh_name.lower())
+                    with open(os.path.join(dir_path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
+                        object_file.write('#ifndef _%s_H_\n' % mesh_name)
+                        object_file.write('#define _%s_H_\n\n' % mesh_name)
+                        object_file.write('#include "%s.h"\n\n' % resource_file_name)
+                        self.export_mesh(mesh, mesh_name, cur_material_alpha, object_file)
+                        object_file.write('#endif  // _%s_H_\n' % mesh_name)
                 else:
-                    self.export_mesh(mesh, mesh_name, main_file)
+                    self.export_mesh(mesh, mesh_name, cur_material_alpha, main_file)
+
+                if cur_material and cur_material.name not in materials:
+                    self.export_material(cur_material, resource_file);
+                    materials.append(cur_material.name)
+
+            if self.prop_export_object_as_file:
+                resource_file.write('#endif  // _%s_H_\n' % resource_file_name.upper())
+                resource_file.close()
 
             main_file.write('#endif  // _%s_H_\n' % main_file_name.upper())
-
-        '''
-        if self.prop_export_object_as_file:
-            for obj in objects:
-                path, _ = os.path.split(self.filepath)
-                object_name = obj.name.replace(' ', '_').replace('.', '_')
-                with open(os.path.join(path, '%s.h' % object_name), "w+t", encoding="utf8", newline="\n") as file:
-                    self.prepare_file(file)
-                    self.export_mesh(obj, scene, file, global_matrix)
-        else:
-            with open(self.filepath, "w+t", encoding="utf8", newline="\n") as file:
-                self.prepare_file(file)
-                for obj in objects:
-                    self.export_mesh(obj, scene, file, global_matrix)
-        '''
 
         self.report({'INFO'}, 'Objects exported successfully!')
         return {'FINISHED'}
 
-    def prepare_file(self, file):
+    def export_structure(self, file):
         structure = '\tGLfloat vertexPosition[3];\n'
         if self.prop_export_color and not self.prop_export_as_color_map:
             structure += '\tGLfloat vertexColor[4];\n'
@@ -343,7 +334,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
     '''
 
-    def export_mesh(self, mesh, mesh_name, file):
+    def export_material(self, material, file):
+        return True
+
+
+    def export_mesh(self, mesh, mesh_name, alpha, file):
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
@@ -367,7 +362,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
                 if self.prop_export_color and not self.prop_export_as_color_map:
-                    data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
+                    data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, alpha)
                 if self.prop_export_normal:
                     data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
                 if self.prop_export_texture:
@@ -433,7 +428,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t// Polygon %d\n' % polygon.index)
                     for loop_index in polygon.loop_indices:
                         color = cur_color_layer.data[loop_index].color
-                        file.write('\t%.3f, %.3f, %.3f, %.3f,\n' % (color[0], color[1], color[2], 1.0))
+                        file.write('\t%.3f, %.3f, %.3f, %.3f,\n' % (color[0], color[1], color[2], alpha))
 
                 file.seek(file.tell() - 2, os.SEEK_SET)
                 file.write('\n};\n\n')
@@ -459,7 +454,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
                     if self.prop_export_color and cur_color_layer:
                         color = cur_color_layer.data[loop_index].color
-                        data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], 1.0)
+                        data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], alpha)
                     if self.prop_export_normal:
                         data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
                     if self.prop_export_texture and cur_texture_layer:
