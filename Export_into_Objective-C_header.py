@@ -34,13 +34,13 @@ IOOBJOrientationHelper = orientation_helper_factory("IOOBJOrientationHelper", ax
       
 class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper):
 
-    bl_idname = "export_scene.h"
-    bl_label = 'Export Objective-C header'
+    bl_idname = 'export_scene.h'
+    bl_label =  'Export Objective-C header'
     bl_options = {'PRESET'}
 
     filename_ext = ".h"
     filter_glob = StringProperty(
-        default="*.h;*.mtl",
+        default="*.h",
         options={'HIDDEN'},
     )
 
@@ -250,6 +250,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         global_matrix = Matrix.Scale(self.global_scale, 4) * axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()
 
         scene = context.scene
+        scene_name = scene.name.replace(' ', '_').replace('.', '_')
 
         # Exit edit mode before exporting, so current object states are exported properly.
         if bpy.ops.object.mode_set.poll():
@@ -315,6 +316,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     self.export_mesh(obj, scene, file, global_matrix)
         '''
 
+        self.report({'INFO'}, 'Objects exported successfully!')
         return {'FINISHED'}
 
     def prepare_file(self, file):
@@ -327,6 +329,19 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             structure += '\tGLfloat texturePosition[2];\n'
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
+
+    '''
+    def export_texture(self, mesh, file):
+        file.write() = '\tGLfloat vertexPosition[3];\n'
+        if self.prop_export_color and not self.prop_export_as_color_map:
+            structure += '\tGLfloat vertexColor[4];\n'
+        if self.prop_export_normal:
+            structure += '\tGLfloat normalDirection[3];\n'
+        if self.prop_export_texture:
+            structure += '\tGLfloat texturePosition[2];\n'
+
+        file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
+    '''
 
     def export_mesh(self, mesh, mesh_name, file):
 
@@ -397,9 +412,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             else:
                 # Иначе под индексы вершин каждого полигона отведена своя строка
                 array = []
-                for loop_index in polygon.loop_indices:
-                    array.append(str(mesh.loops[loop_index].vertex_index))
+                for polygon in mesh.polygons:
+                    for loop_index in polygon.loop_indices:
+                        array.append(str(mesh.loops[loop_index].vertex_index))
+
                     file.write('\t%s,\n' % ', '.join(array))
+                    array = []
 
             file.seek(file.tell()-2, os.SEEK_SET)
             file.write('\n};\n\n')
