@@ -201,6 +201,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default=True,
     )
 
+    prop_export_material = BoolProperty(
+        name="Export object's materials",
+        description="",
+        default=True,
+    )
+
     '''
     use_nurbs = BoolProperty(
             name="Write Nurbs",
@@ -298,7 +304,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     self.export_mesh(mesh, mesh_name, cur_material_alpha, main_file)
 
                 if cur_material and cur_material.name not in materials:
-                    self.export_material(cur_material, resource_file);
+                    self.export_material(cur_material, context.scene, resource_file);
                     materials.append(cur_material.name)
 
             if self.prop_export_object_as_file:
@@ -321,6 +327,24 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
 
+        file.write('typedef struct {'
+                   '\tGLfloat ambient[4];'
+                   '\tGLfloat diffuse[4];'
+                   '\tGLfloat specular[4];'
+                   '\tGLfloat emission[4];'
+                   '\tGLfloat shininess;'
+                   '\tGLfloat transparency;'
+                   '\tunsigned char *texture;'
+                   '} Material;\n\n')
+
+        file.write('typedef struct {'
+                   '\tGLfloat ambient[4];'
+                   '\tGLfloat diffuse[4];'
+                   '\tGLfloat specular[4];'
+                   '\tGLfloat position[4];'
+                   '\tGLfloat direction[4];'
+                   '} Light;\n\n')
+
     '''
     def export_texture(self, mesh, file):
         file.write() = '\tGLfloat vertexPosition[3];\n'
@@ -334,8 +358,26 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
     '''
 
-    def export_material(self, material, file):
-        return True
+    @staticmethod
+    def export_material(self, material, scene, file):
+        ambient_color = scene.world.ambient_color.append(1.0) * material.ambient
+        diffuse_color = material.diffuse_color.append(material.translucency)
+        specular_color = material.specular_color.append(material.specular_alpha) * material.specular_intensity
+        emission_color = material.volume.emission_color * material.volume.emission
+
+        file.write('const Material %s = {\n'
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # diffuse
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # specular
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
+                   '\t%.4f, %.4f\n'           # shininess, transparency
+                   '}\n\n' % (material.name.upper(),
+                              ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
+                              diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
+                              specular_color[0], specular_color[1], specular_color[2], specular_color,
+                              emission_color[0], emission_color[1], emission_color[2], emission_color[3],
+                              material.emit, material.alpha)
+        )
 
 
     def export_mesh(self, mesh, mesh_name, alpha, file):
