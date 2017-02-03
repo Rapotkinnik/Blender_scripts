@@ -242,10 +242,21 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
     )
     '''
     global_scale = FloatProperty(
-            name="Scale",
-            min=0.01, max=1000.0,
-            default=1.0,
-            )
+        name="Scale",
+        min=0.01, max=1000.0,
+        default=1.0,
+    )
+
+    prop_export_language = EnumProperty(
+        name="Export to language",
+        items=[
+            ("C++", "C++"),
+            ("Java", "Java"),
+            ("Swift", "Swift"),
+            ("OBJ-C", "Objective-C")
+        ],
+        default="OBJ-C"
+    )
 
     path_mode = path_reference_mode
 
@@ -289,22 +300,20 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 except RuntimeError:
                     continue
 
-                cur_material = obj.active_material;
-                cur_material_alpha = cur_material.alpha if cur_material else 1.0
-
                 if self.prop_export_object_as_file:
                     main_file.write('#include "%s.h"\n\n' % mesh_name.lower())
                     with open(os.path.join(dir_path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
                         object_file.write('#ifndef _%s_H_\n' % mesh_name)
                         object_file.write('#define _%s_H_\n\n' % mesh_name)
                         object_file.write('#include "%s.h"\n\n' % resource_file_name)
-                        self.export_mesh(mesh, mesh_name, cur_material_alpha, object_file)
+                        self.export_mesh(mesh, mesh_name, object_file)
                         object_file.write('#endif  // _%s_H_\n' % mesh_name)
                 else:
-                    self.export_mesh(mesh, mesh_name, cur_material_alpha, main_file)
+                    self.export_mesh(mesh, mesh_name, main_file)
 
+                cur_material = obj.active_material
                 if cur_material and cur_material.name not in materials:
-                    self.export_material(cur_material, context.scene, resource_file);
+                    self.export_material(cur_material, context.scene, resource_file)
                     materials.append(cur_material.name)
 
             if self.prop_export_object_as_file:
@@ -359,11 +368,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
     '''
 
     @staticmethod
-    def export_material(self, material, scene, file):
+    def export_material(material, scene, file):
         ambient_color = scene.world.ambient_color.append(1.0) * material.ambient
         diffuse_color = material.diffuse_color.append(material.translucency)
         specular_color = material.specular_color.append(material.specular_alpha) * material.specular_intensity
-        emission_color = material.volume.emission_color * material.volume.emission
+        emission_color = [col * material.volume.emission for col in material.volume.emission_color]
 
         file.write('const Material %s = {\n'
                    '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
@@ -377,10 +386,111 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                               specular_color[0], specular_color[1], specular_color[2], specular_color,
                               emission_color[0], emission_color[1], emission_color[2], emission_color[3],
                               material.emit, material.alpha)
+
+                   # mesh.uv_texutres[]
         )
 
+        def export_material(self, material, scene, file):
 
-    def export_mesh(self, mesh, mesh_name, alpha, file):
+            # Ambient
+            mirror_settings = material.raytrace_mirror
+            if mirror_settings.use:
+                ambient_color = [col * mirror_settings.reflect_factor for col in  material.mirror_color]
+            else:
+                ambient_color = [col * material.ambient for col in scene.world.ambient_color]
+                # ambient_color = (material.ambient, material.ambient,material.ambient, 1.0)  # Do not use world color! Why?
+
+            ambient_color.append(1.0)
+
+            deffuse_color = [col * material.diffuse_intensity for col in material.diffuse_color]
+            deffuse_color.append(material.translucency)
+
+            specular_color = [col * material.specular_intensity for col in material.specular_color]
+            specular_color.append(material.specular_alpha)
+
+            # XXX Blender has no color emission, it's using diffuse color instead...
+            #emission_color = [col * material.emit for col in material.diffuse_color]
+            #emission_color.append(1.0)
+
+            emission_color = [col * material.volume.emission for col in material.volume.emission_color]
+            emission_color.append(1.0)
+
+            shininess = (0.4 - material.specular_slope) / 0.0004 if material.specular_shader == 'WARDISO' else (material.specular_hardness - 1) / 0.51
+
+        # Write images!
+
+    if face_img:  # We have an image on the face!
+        filepath = face_img.filepath
+        if filepath:  # may be '' for generated images
+            # write relative image path
+            filepath = bpy_extras.io_utils.path_reference(filepath, source_dir, dest_dir,
+                                                          path_mode, "", copy_set, face_img.library)
+            fw('map_Kd %s\n' % filepath)  # Diffuse mapping image
+            del filepath
+        else:
+            # so we write the materials image.
+            face_img = None
+
+    if mat:  # No face image. if we havea material search for MTex image.
+        image_map = {}
+        # backwards so topmost are highest priority
+        for mtex in reversed(mat.texture_slots):
+            if mtex and mtex.texture and mtex.texture.type == 'IMAGE':
+                image = mtex.texture.image
+                if image:
+                    # texface overrides others
+                    if (mtex.use_map_color_diffuse and (face_img is None) and
+                            (mtex.use_map_warp is False) and (mtex.texture_coords != 'REFLECTION')):
+                        image_map["map_Kd"] = image
+                    if mtex.use_map_ambient:
+                        image_map["map_Ka"] = image
+                    # this is the Spec intensity channel but Ks stands for specular Color
+                    '''
+                    if mtex.use_map_specular:
+                        image_map["map_Ks"] = image
+                    '''
+                    if mtex.use_map_color_spec:  # specular color
+                        image_map["map_Ks"] = image
+                    if mtex.use_map_hardness:  # specular hardness/glossiness
+                        image_map["map_Ns"] = image
+                    if mtex.use_map_alpha:
+                        image_map["map_d"] = image
+                    if mtex.use_map_translucency:
+                        image_map["map_Tr"] = image
+                    if mtex.use_map_normal:
+                        image_map["map_Bump"] = image
+                    if mtex.use_map_displacement:
+                        image_map["disp"] = image
+                    if mtex.use_map_color_diffuse and (mtex.texture_coords == 'REFLECTION'):
+                        image_map["refl"] = image
+                    if mtex.use_map_emit:
+                        image_map["map_Ke"] = image
+
+        for key, image in sorted(image_map.items()):
+            filepath = bpy_extras.io_utils.path_reference(image.filepath, source_dir, dest_dir,
+                                                          path_mode, "", copy_set, image.library)
+            fw('%s %s\n' % (key, repr(filepath)[1:-1]))
+
+
+
+            file.write('const Material %s = {\n'
+                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
+                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # diffuse
+                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # specular
+                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
+                       '\t%.4f, %.4f\n'  # shininess, transparency
+                       '}\n\n' % (material.name.upper(),
+                                  ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
+                                  diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
+                                  specular_color[0], specular_color[1], specular_color[2], specular_color,
+                                  emission_color[0], emission_color[1], emission_color[2], emission_color[3],
+                                  material.emit, material.alpha)
+
+                       # mesh.uv_texutres[]
+                       )
+
+
+    def export_mesh(self, mesh, mesh_name, file):
 
         # Триангуляция полигонов
         if self.prop_use_triangles:
@@ -404,7 +514,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for vertex in mesh.vertices:
                 data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
                 if self.prop_export_color and not self.prop_export_as_color_map:
-                    data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, alpha)
+                    data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
                 if self.prop_export_normal:
                     data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
                 if self.prop_export_texture:
@@ -468,9 +578,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
                 for polygon in mesh.polygons:
                     file.write('\t// Polygon %d\n' % polygon.index)
+                    material = mesh.materials[polygon.material_index]
                     for loop_index in polygon.loop_indices:
                         color = cur_color_layer.data[loop_index].color
-                        file.write('\t%.3f, %.3f, %.3f, %.3f,\n' % (color[0], color[1], color[2], alpha))
+                        file.write('\t%.3f, %.3f, %.3f, %.3f,\n' % (color[0], color[1], color[2], material.alpha))
 
                 file.seek(file.tell() - 2, os.SEEK_SET)
                 file.write('\n};\n\n')
@@ -490,13 +601,14 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             for polygon in mesh.polygons:
                 file.write('\t// Polygon %d\n' % polygon.index)
+                material = mesh.materials[polygon.material_index]
                 for loop_index in polygon.loop_indices:
                     vertex = mesh.vertices[mesh.loops[loop_index].vertex_index]
 
                     data = '{%.6f, %.6f, %.6f}' % (vertex.co[0], vertex.co[1], vertex.co[2])
                     if self.prop_export_color and cur_color_layer:
                         color = cur_color_layer.data[loop_index].color
-                        data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], alpha)
+                        data += ', {%.3f, %.3f, %.3f, %.3f}' % (color[0], color[1], color[2], material.alpha)
                     if self.prop_export_normal:
                         data += ', {%.6f, %.6f, %.6f}' % (vertex.normal[0], vertex.normal[1], vertex.normal[2])
                     if self.prop_export_texture and cur_texture_layer:
