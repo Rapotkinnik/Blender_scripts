@@ -149,6 +149,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         #update=hide_include_prop
     )
 
+    prop_export_curve_as_function = BoolProperty(
+        name="Export curve as function",
+        description="",
+        default=True,
+    )
+
     prop_use_vertex_indices = BoolProperty(
         name="Export vertex indices too",
         description="",
@@ -258,6 +264,15 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default="OBJ-C"
     )
 
+    prop_export_api = EnumProperty(
+        name="Export to GL API",
+        items=[
+            ("GL4", "OpenGL 4.0"),
+            ("GLES2", "OpenGL ES 2.0")
+        ],
+        default="GLES2"
+    )
+
     path_mode = path_reference_mode
 
     check_extension = True
@@ -336,22 +351,22 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
 
-        file.write('typedef struct {'
-                   '\tGLfloat ambient[4];'
-                   '\tGLfloat diffuse[4];'
-                   '\tGLfloat specular[4];'
-                   '\tGLfloat emission[4];'
-                   '\tGLfloat shininess;'
-                   '\tGLfloat transparency;'
-                   '\tunsigned char *texture;'
+        file.write('typedef struct {\n'
+                   '\tGLfloat ambient[4];\n'
+                   '\tGLfloat diffuse[4];\n'
+                   '\tGLfloat specular[4];\n'
+                   '\tGLfloat emission[4];\n'
+                   '\tGLfloat shininess;\n'
+                   '\tGLfloat transparency;\n'
+                   '\tunsigned char *texture;\n'
                    '} Material;\n\n')
 
-        file.write('typedef struct {'
-                   '\tGLfloat ambient[4];'
-                   '\tGLfloat diffuse[4];'
-                   '\tGLfloat specular[4];'
-                   '\tGLfloat position[4];'
-                   '\tGLfloat direction[4];'
+        file.write('typedef struct {\n'
+                   '\tGLfloat ambient[4];\n'
+                   '\tGLfloat diffuse[4];\n'
+                   '\tGLfloat specular[4];\n'
+                   '\tGLfloat position[4];\n'
+                   '\tGLfloat direction[4];\n'
                    '} Light;\n\n')
 
     '''
@@ -366,7 +381,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
     '''
-
+    '''
     @staticmethod
     def export_material(material, scene, file):
         ambient_color = scene.world.ambient_color.append(1.0) * material.ambient
@@ -388,36 +403,50 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                               material.emit, material.alpha)
 
                    # mesh.uv_texutres[]
-        )
+    '''
 
-        def export_material(self, material, scene, file):
+    def export_material(self, material, scene, file):
 
-            # Ambient
-            mirror_settings = material.raytrace_mirror
-            if mirror_settings.use:
-                ambient_color = [col * mirror_settings.reflect_factor for col in  material.mirror_color]
-            else:
-                ambient_color = [col * material.ambient for col in scene.world.ambient_color]
-                # ambient_color = (material.ambient, material.ambient,material.ambient, 1.0)  # Do not use world color! Why?
+        # Ambient
+        mirror_settings = material.raytrace_mirror
+        if mirror_settings.use:
+            ambient_color = [col * mirror_settings.reflect_factor for col in  material.mirror_color]
+        else:
+            ambient_color = [col * material.ambient for col in scene.world.ambient_color]
+            # ambient_color = (material.ambient, material.ambient,material.ambient, 1.0)  # Do not use world color! Why?
 
-            ambient_color.append(1.0)
+        ambient_color.append(1.0)
 
-            deffuse_color = [col * material.diffuse_intensity for col in material.diffuse_color]
-            deffuse_color.append(material.translucency)
+        diffuse_color = [col * material.diffuse_intensity for col in material.diffuse_color]
+        diffuse_color.append(material.translucency)
 
-            specular_color = [col * material.specular_intensity for col in material.specular_color]
-            specular_color.append(material.specular_alpha)
+        specular_color = [col * material.specular_intensity for col in material.specular_color]
+        specular_color.append(material.specular_alpha)
 
-            # XXX Blender has no color emission, it's using diffuse color instead...
-            #emission_color = [col * material.emit for col in material.diffuse_color]
-            #emission_color.append(1.0)
+        # XXX Blender has no color emission, it's using diffuse color instead...
+        # emission_color = [col * material.emit for col in material.diffuse_color]
+        # emission_color.append(1.0)
 
-            emission_color = [col * material.volume.emission for col in material.volume.emission_color]
-            emission_color.append(1.0)
+        emission_color = [col * material.volume.emission for col in material.volume.emission_color]
+        emission_color.append(1.0)
 
-            shininess = (0.4 - material.specular_slope) / 0.0004 if material.specular_shader == 'WARDISO' else (material.specular_hardness - 1) / 0.51
+        shininess = (0.4 - material.specular_slope) / 0.0004 if material.specular_shader == 'WARDISO' else (material.specular_hardness - 1) / 0.51
 
-        # Write images!
+        file.write('const Material %s = {\n'
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # diffuse
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # specular
+                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
+                   '\t%.4f, %.4f\n'  # shininess, transparency
+                   '};\n\n' % (material.name.upper(),
+                              ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
+                              diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
+                              specular_color[0], specular_color[1], specular_color[2], specular_color[3],
+                              emission_color[0], emission_color[1], emission_color[2], emission_color[3],
+                              shininess, material.alpha))
+
+    '''
+    # Write images!
 
     if face_img:  # We have an image on the face!
         filepath = face_img.filepath
@@ -445,10 +474,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     if mtex.use_map_ambient:
                         image_map["map_Ka"] = image
                     # this is the Spec intensity channel but Ks stands for specular Color
-                    '''
-                    if mtex.use_map_specular:
-                        image_map["map_Ks"] = image
-                    '''
+
+                    # if mtex.use_map_specular:
+                    #     image_map["map_Ks"] = image
+
                     if mtex.use_map_color_spec:  # specular color
                         image_map["map_Ks"] = image
                     if mtex.use_map_hardness:  # specular hardness/glossiness
@@ -470,24 +499,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             filepath = bpy_extras.io_utils.path_reference(image.filepath, source_dir, dest_dir,
                                                           path_mode, "", copy_set, image.library)
             fw('%s %s\n' % (key, repr(filepath)[1:-1]))
-
-
-
-            file.write('const Material %s = {\n'
-                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
-                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # diffuse
-                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # specular
-                       '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
-                       '\t%.4f, %.4f\n'  # shininess, transparency
-                       '}\n\n' % (material.name.upper(),
-                                  ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
-                                  diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
-                                  specular_color[0], specular_color[1], specular_color[2], specular_color,
-                                  emission_color[0], emission_color[1], emission_color[2], emission_color[3],
-                                  material.emit, material.alpha)
-
-                       # mesh.uv_texutres[]
-                       )
+    '''
 
 
     def export_mesh(self, mesh, mesh_name, file):
@@ -624,7 +636,34 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         if self.prop_export_texture and cur_texture_layer:
             image = mesh.uv_textures.active.data
 
-    def export_curv(self, curve, file, **kwargs):
+    @staticmethod
+    def export_curve(curve, file, **kwargs): #TODO: Подумать, что сделать с матрицей объекта?
+        return_type = 'CGPoint' if curve.dimensions == '2D' else 'CGPoint3D'
+        for spline in curve.splines:
+            file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))
+            if spline.type == 'BEZIER':
+                cubic_spline_count = len(spline.bezier_points)
+                if curve.se_cyclic_u:
+                    cubic_spline_count += 1
+
+                for index in range(cubic_spline_count):
+                    first_point = spline.bezier_points[index]
+                    second_point = spline.bezier_points[index + 1]
+                    file.write('\tif(t >= %.4f && t < %.4f)\n{' % (index/cubic_spline_count, (index + 1)/cubic_spline_count))
+                    file.write('\t\tfloat local_t = t / %d;\n' % cubic_spline_count)
+                    file.write('\t\tCGPoint p0 = CGPointMake(%.4f, %.4f);\n' % first_point.co[:])
+                    file.write('\t\tCGPoint p1 = CGPointMake(%.4f, %.4f);\n' % first_point.handle_right[:])
+                    file.write('\t\tCGPoint p2 = CGPointMake(%.4f, %.4f);\n' % second_point.handle_left[:])
+                    file.write('\t\tCGPoint p3 = CGPointMake(%.4f, %.4f);\n' % second_point.co[:])
+                    file.write('\t\treturn (1 - local_t)^3*p0 + 3*(1 - local_t)^2*t*p1 + 3*(1-local_t)*t^2*p2 + t^3*p3;\n}')
+                else:
+                    if curve.se_cyclic_u:
+                        pass
+
+            if spline.type == 'NURB':
+                for point in spline.points:
+                    return False
+            file.write('};\n\n')
         print(kwargs)
 
 
