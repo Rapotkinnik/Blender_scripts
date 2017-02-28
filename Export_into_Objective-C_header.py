@@ -10,7 +10,7 @@
 bl_info = {
     'name': 'Objective-C header',
     'author': 'Nikolay Rapotkin',
-    'version': (0, 0, 2),
+    'version': (0, 0, 3),
     'blender': (2, 74, 0),
     'location': 'File > Export',
     'description': 'Export meshes into Objective-C header for OpenGL ES painting',
@@ -264,8 +264,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         default="OBJ-C"
     )
 
-    prop_export_api = EnumProperty(
-        name="Export to GL API",
+    prop_export_gl_type = EnumProperty(
+        name="Export to GL API type",
         items=[
             ("GL4", "OpenGL 4.0"),
             ("GLES2", "OpenGL ES 2.0")
@@ -276,6 +276,23 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
     path_mode = path_reference_mode
 
     check_extension = True
+
+    @staticmethod
+    def name_compact(name):
+        if name is None:
+            return 'None'
+        else:
+            return name.replace(' ', '_')
+
+    @staticmethod
+    def mesh_triangulate(mesh):
+        import bmesh
+        bm = bmesh.new()
+
+        bm.from_mesh(mesh)
+        bmesh.ops.triangulate(bm, faces=bm.faces)
+        bm.to_mesh(mesh)
+        bm.free()
 
     def execute(self, context):
         from mathutils import Matrix                                         
@@ -306,14 +323,16 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             self.export_structure(resource_file)
 
             for obj in objects:
-                try:
-                    mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                    mesh_name = obj.name.upper().replace(' ', '_').replace('.', '_')
+                if self.prop_export_curve_as_function and obj.type == 'CURVE':
+                else:
+                    try:
+                        mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                        mesh_name = obj.name.upper().replace(' ', '_').replace('.', '_')
 
-                    if self.prop_use_global_matrix:
-                        mesh.transform(global_matrix * obj.matrix_world)
-                except RuntimeError:
-                    continue
+                        if self.prop_use_global_matrix:
+                            mesh.transform(global_matrix * obj.matrix_world)
+                    except RuntimeError:
+                        continue
 
                 if self.prop_export_object_as_file:
                     main_file.write('#include "%s.h"\n\n' % mesh_name.lower())
@@ -341,6 +360,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         return {'FINISHED'}
 
     def export_structure(self, file):
+        file.write('#import "GLKMathTypes.h"\n\n')
+
         structure = '\tGLfloat vertexPosition[3];\n'
         if self.prop_export_color and not self.prop_export_as_color_map:
             structure += '\tGLfloat vertexColor[4];\n'
@@ -380,6 +401,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             structure += '\tGLfloat texturePosition[2];\n'
 
         file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
+
+        typedef struct {
+            const unsigned int width, height;
+            const unsigned char[] =
+        } Texture
     '''
     '''
     @staticmethod
@@ -642,46 +668,40 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         for spline in curve.splines:
             file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))
             if spline.type == 'BEZIER':
-                cubic_spline_count = len(spline.bezier_points)
+                bezier_points = list(spline.bezier_points)
                 if curve.se_cyclic_u:
-                    cubic_spline_count += 1
+                    bezier_points.append(spline.bezier_points[0])
 
-                for index in range(cubic_spline_count):
-                    first_point = spline.bezier_points[index]
-                    second_point = spline.bezier_points[index + 1]
-                    file.write('\tif(t >= %.4f && t < %.4f)\n{' % (index/cubic_spline_count, (index + 1)/cubic_spline_count))
-                    file.write('\t\tfloat local_t = t / %d;\n' % cubic_spline_count)
-                    file.write('\t\tCGPoint p0 = CGPointMake(%.4f, %.4f);\n' % first_point.co[:])
-                    file.write('\t\tCGPoint p1 = CGPointMake(%.4f, %.4f);\n' % first_point.handle_right[:])
-                    file.write('\t\tCGPoint p2 = CGPointMake(%.4f, %.4f);\n' % second_point.handle_left[:])
-                    file.write('\t\tCGPoint p3 = CGPointMake(%.4f, %.4f);\n' % second_point.co[:])
-                    file.write('\t\treturn (1 - local_t)^3*p0 + 3*(1 - local_t)^2*t*p1 + 3*(1-local_t)*t^2*p2 + t^3*p3;\n}')
-                else:
-                    if curve.se_cyclic_u:
-                        pass
+                bezier_point_count = len(bezier_points)
+
+                for index in range(bezier_point_count - 1):
+                    first_point = bezier_points[index]
+                    second_point = bezier_points[index + 1]
+
+                    if index < bezier_point_count - 1:
+                        file.write('\tif(t >= %.4f && t < %.4f)\n{' % (index/bezier_point_count, (index + 1)/bezier_point_count))
+                    else:
+                        file.write('\tif(t >= %.4f && t <= 1.0)\n{' % (index / bezier_point_count))
+
+                    #(ob_mat * pt.co.to_3d())[:])
+
+                    file.write('\t\tCGPoint result;')
+                    file.write('\t\tfloat lt = t * %d / %d;\n' % (bezier_point_count, index + 1))
+                    file.write('\t\tCGPoint p0 = CGPointMake(%.4f, %.4f);\n'   % first_point.co[:])
+                    file.write('\t\tCGPoint p1 = CGPointMake(%.4f, %.4f);\n'   % first_point.handle_right[:])
+                    file.write('\t\tCGPoint p2 = CGPointMake(%.4f, %.4f);\n'   % second_point.handle_left[:])
+                    file.write('\t\tCGPoint p3 = CGPointMake(%.4f, %.4f);\n\n' % second_point.co[:])
+                    file.write('\t\tresult.x =  pow((1 - lt), 3) * p0.x + 3 * pow((1 - lt), 2) * lt * p1.x + 3 * (1 - lt) * pow(lt, 2) * p2.x + pow(lt, 3) * p3.x;\n')
+                    file.write('\t\tresult.y =  pow((1 - lt), 3) * p0.y + 3 * pow((1 - lt), 2) * lt * p1.y + 3 * (1 - lt) * pow(lt, 2) * p2.y + pow(lt, 3) * p3.y;\n')
+                    file.write('\t\treturn result;\n};\n\n')
+
+                    # TODO: Написать функция рисования адаптивным методом через сравнение углов и как раз можно использовать все опорные точки
 
             if spline.type == 'NURB':
                 for point in spline.points:
                     return False
-            file.write('};\n\n')
+            file.write('\treturn CGPointMake(0.0, 0.0);\n};\n\n')
         print(kwargs)
-
-
-def name_compat(name):
-    if name is None:
-        return 'None'
-    else:
-        return name.replace(' ', '_')
-    
-
-def mesh_triangulate(me):
-    import bmesh
-    bm = bmesh.new()
-    
-    bm.from_mesh(me)
-    bmesh.ops.triangulate(bm, faces=bm.faces)
-    bm.to_mesh(me)
-    bm.free()
 
 
 def write_mtl(scene, filepath, path_mode, copy_set, mtl_dict):
