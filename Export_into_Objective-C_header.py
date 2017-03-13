@@ -390,6 +390,47 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    '\tGLfloat direction[4];\n'
                    '} Light;\n\n')
 
+        # Write Bezier polynoms
+        file.write('CGPoint LinearBezierCurve(const CGPoint[2] &points, float t)\n{\n'
+                   '\tCGPoint result;\n'
+                   '\tresult.x = (1 - t)*points[0].x + t*points[1].x;\n'
+                   '\tresult.y = (1 - t)*points[0].y + t*points[1].y;\n'
+                   '\treturn result;\n};\n\n')
+
+        file.write('CGPoint QuadraticBezierCurve(const CGPoint[3] &points, float t)\n{\n'
+                   '\tCGPoint result;\n'
+                   '\tresult.x = pow(1 - t, 2)*points[0].x + 2*t*(1 - t)*points[1].x + 2*t*t*points[2].x;\n'
+                   '\tresult.y = pow(1 - t, 2)*points[0].y + 2*t*(1 - t)*points[1].y + 2*t*t*points[2].y;\n'
+                   '\treturn result;\n};\n\n')
+
+        file.write('CGPoint CubicBezierCurve(const CGPoint[4] &points, float t)\n{')
+        file.write('\tCGPoint result;\n')
+        file.write('\tresult.x = pow(1 - t, 3)*points[0].x + 3*pow(1 - t, 2)*t*points[1].x + '
+                   '3*(1 - t)*t*t*points[2].x + pow(t, 3)*point[3].x;\n')
+        file.write('\tresult.y = pow(1 - t, 3)*points[0].y + 3*pow(1 - t, 2)*t*points[1].y + '
+                   '3*(1 - t)*t*t*points[2].y + pow(t, 3)*point[3].y;\n')
+        file.write('\treturn result;\n};\n\n')
+
+        file.write('CGPoint QuadricBezierCurve(const CGPoint[5] &points, float t)\n{\n')
+        file.write('\tCGPoint result;\n')
+        file.write('\tresult.x = pow(1 - t, 4)*points[0].x + 4*pow(1 - t, 3)*t*points[1].x + '
+                   '6*pow(1 - t, 2)*t*t*points[2].x + 4*pow(t, 3)*(1 - t)*point[3].x + pow(t, 4)*points[4].x;\n')
+        file.write('\tresult.y = pow(1 - t, 4)*points[0].y + 4*pow(1 - t, 3)*t*points[1].y + '
+                   '6*pow(1 - t, 2)*t*t*points[2].y + 4*pow(t, 3)*(1 - t)*point[3].y + pow(t, 4)*points[4].y;\n')
+        file.write('\treturn result;\n};\n\n')
+
+        file.write('CGPoint QuinticBezierCurve(const CGPoint[6] &points, float t)\n{\n')
+        file.write('\tCGPoint result;\n')
+        file.write('\treturn result;\n};\n\n')
+
+        # Write adaptive curve builder function
+        # TODO: обязательно добавить в массив опорные точки, потмоу что они могут сильно влиять на кривую (свободные плечи)
+        file.write('NSArray BuildCurve(CGPoint (*curve)(float t))\n{\n'
+                   '\tCGPoint p0 = curve(0.0);\n'
+                   '\tCGPoint p1 = curve(0.5);\n'
+                   '\tCGPoint p2 = curve(1.0);\n')
+
+
     '''
     def export_texture(self, mesh, file):
         file.write() = '\tGLfloat vertexPosition[3];\n'
@@ -465,11 +506,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
                    '\t%.4f, %.4f\n'  # shininess, transparency
                    '};\n\n' % (material.name.upper(),
-                              ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
-                              diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
-                              specular_color[0], specular_color[1], specular_color[2], specular_color[3],
-                              emission_color[0], emission_color[1], emission_color[2], emission_color[3],
-                              shininess, material.alpha))
+                               ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
+                               diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
+                               specular_color[0], specular_color[1], specular_color[2], specular_color[3],
+                               emission_color[0], emission_color[1], emission_color[2], emission_color[3],
+                               shininess, material.alpha))
 
     '''
     # Write images!
@@ -669,7 +710,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))
             if spline.type == 'BEZIER':
                 bezier_points = list(spline.bezier_points)
-                if curve.se_cyclic_u:
+                if spline.use_cyclic_u:
                     bezier_points.append(spline.bezier_points[0])
 
                 bezier_point_count = len(bezier_points)
@@ -679,29 +720,80 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     second_point = bezier_points[index + 1]
 
                     if index < bezier_point_count - 1:
-                        file.write('\tif(t >= %.4f && t < %.4f)\n{' % (index/bezier_point_count, (index + 1)/bezier_point_count))
+                        file.write('\tif(t >= %.4f && t < %.4f)\n{\n' % (index/bezier_point_count, (index + 1)/bezier_point_count))
                     else:
-                        file.write('\tif(t >= %.4f && t <= 1.0)\n{' % (index / bezier_point_count))
+                        file.write('\tif(t >= %.4f && t <= 1.0)\n{\n' % (index / bezier_point_count))
+
+                    # TODO: Сделать один массив с точками, а потом каким-нибдь макаром передавать в функцию нужный кусок массива
+
+                    file.write('\t\tCGPoint points[4] = {\n'
+                               '\t\t\t{%.6f, %.6f}, {%.6f, %.6f},\n'
+                               '\t\t\t{%.6f, %.6f}, {%.6f, %.6f}\n'
+                               '\t\t};\n\n' % (first_point.co[0], first_point.co[1],
+                                               first_point.handle_right[0], first_point.handle_right[1],
+                                               second_point.handle_left[0], second_point.handle_left[1],
+                                               second_point.co[0], second_point.co[1]))
+
+                    file.write('\t\treturn CubicBezierCurve(points, t * %d / %d);\n\n' % (bezier_point_count, index + 1))
+
+                    file.write('\t};\n')
 
                     #(ob_mat * pt.co.to_3d())[:])
 
-                    file.write('\t\tCGPoint result;')
-                    file.write('\t\tfloat lt = t * %d / %d;\n' % (bezier_point_count, index + 1))
-                    file.write('\t\tCGPoint p0 = CGPointMake(%.4f, %.4f);\n'   % first_point.co[:])
-                    file.write('\t\tCGPoint p1 = CGPointMake(%.4f, %.4f);\n'   % first_point.handle_right[:])
-                    file.write('\t\tCGPoint p2 = CGPointMake(%.4f, %.4f);\n'   % second_point.handle_left[:])
-                    file.write('\t\tCGPoint p3 = CGPointMake(%.4f, %.4f);\n\n' % second_point.co[:])
-                    file.write('\t\tresult.x =  pow((1 - lt), 3) * p0.x + 3 * pow((1 - lt), 2) * lt * p1.x + 3 * (1 - lt) * pow(lt, 2) * p2.x + pow(lt, 3) * p3.x;\n')
-                    file.write('\t\tresult.y =  pow((1 - lt), 3) * p0.y + 3 * pow((1 - lt), 2) * lt * p1.y + 3 * (1 - lt) * pow(lt, 2) * p2.y + pow(lt, 3) * p3.y;\n')
-                    file.write('\t\treturn result;\n};\n\n')
+                    # file.write('\t\tCGPoint result;')
+                    # file.write('\t\tfloat lt = t * %d / %d;\n' % (bezier_point_count, index + 1))
+                    # file.write('\t\tCGPoint p0 = CGPointMake(%.4f, %.4f);\n'   % first_point.co[:])
+                    # file.write('\t\tCGPoint p1 = CGPointMake(%.4f, %.4f);\n'   % first_point.handle_right[:])
+                    # file.write('\t\tCGPoint p2 = CGPointMake(%.4f, %.4f);\n'   % second_point.handle_left[:])
+                    # file.write('\t\tCGPoint p3 = CGPointMake(%.4f, %.4f);\n\n' % second_point.co[:])
+                    # file.write('\t\tresult.x =  pow((1 - lt), 3) * p0.x + 3 * pow((1 - lt), 2) * lt * p1.x + 3 * (1 - lt) * pow(lt, 2) * p2.x + pow(lt, 3) * p3.x;\n')
+                    # file.write('\t\tresult.y =  pow((1 - lt), 3) * p0.y + 3 * pow((1 - lt), 2) * lt * p1.y + 3 * (1 - lt) * pow(lt, 2) * p2.y + pow(lt, 3) * p3.y;\n')
+                    # file.write('\t\treturn result;\n};\n\n')
 
                     # TODO: Написать функция рисования адаптивным методом через сравнение углов и как раз можно использовать все опорные точки
 
-            if spline.type == 'NURB':
-                for point in spline.points:
-                    return False
+            # https://www.codeproject.com/Articles/996281/NURBS-curve-made-easy
+            if spline.type == 'NURBS':
+                bezier_points = list(spline.points)
+                if spline.use_cyclic_u:
+                    bezier_points.append(spline.points[0])
+
+                knots = [0]
+                for index, point in enumerate(bezier_points):
+                    knots.append(knots[index] + point.weight)
+
+                bezier_point_count = len(bezier_points)
+                bezier_segment_count = len(bezier_points) - spline.order_u + 1
+                for index in range(bezier_segment_count):
+                    if index < bezier_segment_count:
+                        file.write('\tif(t >= %.4f && t < %.4f)\n{\n' % (index / bezier_segment_count,
+                                                                        (index + 1) / bezier_segment_count))
+                    else:
+                        file.write('\tif(t >= %.4f && t <= 1.0)\n{\n' % (index / bezier_segment_count))
+
+                    if spline.order_u == 3:
+                        v0 = ((knots[index + 3] - knots[index + 2]) * bezier_points[index].co[:] +
+                              (knots[index + 2] - knots[index + 1]) * bezier_points[index + 1].co[:]) / (knots[index + 3] - knots[index + 1])
+                        b0 = bezier_points[index + 1].co[:]
+                        v1 = ((knots[(index + 1) + 3] - knots[(index + 1) + 2]) * bezier_points[(index + 1)].co[:] +
+                              (knots[(index + 1) + 2] - knots[(index + 1) + 1]) * bezier_points[(index + 1) + 1].co[:]) / \
+                              (knots[(index + 1) + 3] - knots[(index + 1) + 1])
+
+                        file.write('\t\tCGPoint points[3] = {\n'
+                                   '\t\t\t{%.6f, %.6f}, {%.6f, %.6f}, {%.6f, %.6f}\n'
+                                   '\t\t};\n\n' % (v0[0], v0[1], b0[0], b0[1], v1[0], v1[1]))
+
+                        file.write('\t\treturn QuadraticBezierCurve(points, t * %d / %d);\n\n' % (bezier_segment_count, index + 1))
+
+                    file.write('\t};\n')
             file.write('\treturn CGPointMake(0.0, 0.0);\n};\n\n')
         print(kwargs)
+
+
+
+
+
+
 
 
 def write_mtl(scene, filepath, path_mode, copy_set, mtl_dict):
