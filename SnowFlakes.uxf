@@ -12,7 +12,7 @@
     <panel_attributes>Object
 --
 -indices: uint[]
--data: Vertex[]
+-data:    Vertex[]
 --
 </panel_attributes>
     <additional_attributes/>
@@ -136,7 +136,7 @@
 --
 #order_u: uint
 #order_v: uint
-#points: Point3D[]
+#points:  Point3D[]
 --
 +set_order(order: uint)
 +use_control_points(use: bool)
@@ -278,7 +278,7 @@
 Количество кривых равно количество точек
 
 Вызовы методов анимации изменяют
-внетрениие данные?</panel_attributes>
+внутрениие данные?</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
