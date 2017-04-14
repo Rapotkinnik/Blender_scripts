@@ -1,13 +1,11 @@
+#import <GLKit/GLKit.h>
+#import <CoreFoundation/CFArray.h>
+
 typedef struct
 {
     float x;
     float y;
 } Point2D;
-
-Point2D & operator+(const Point2D &point, float t);
-Point2D & operator-(const Point2D &point, float t);
-Point2D & operator*(const Point2D &point, float t);
-Point2D & operator/(const Point2D &point, float t);
 
 typedef struct
 {
@@ -19,10 +17,17 @@ typedef struct
 {
     float x;
     float y;
-    float z
+    float z;
 } Point3D;
 
-Point2Dtypedef struct
+typedef struct
+{
+    float r;
+    float g;
+    float b;
+} ColorRGB;
+
+typedef struct
 {
     float r;
     float g;
@@ -33,49 +38,50 @@ Point2Dtypedef struct
 typedef struct
 {
     Point3D    coord;
-    ColorRGBA color;
+    ColorRGBA  color;
     Point3D    normal;
     PointUV    textureCoord;
 } Vertext;
 
+@interface NSValue (Point3D)
+
++ (instancetype) valueWithPoint3D: (Point3D) value;
+
+@property (readonly) Point3D value;
+
+@end
+
+Point3D LinearBezierCurve(const Point3D points[2], float t);
+Point3D QuadraticBezierCurve(const Point3D points[3], float t);
+Point3D CubicBezierCurve(const Point3D points[4], float t);
+Point3D QuadricBezierCurve(const Point3D points[5], float t);
+Point3D QuinticBezierCurve(const Point3D points[6], float t);
+
+float getAngleBetween();
+
+
 // Кривая
 @interface Curve : NSObject
 
-@protected
-@property unsigned int   order_;
-@property int[]             knots_;
-@property Point3D[]      points_;
-@property GLKMatrix4x4 model_matrix_;
+- (int)        getPointsCount;
+- (Point3D)    getPointAt: (float) t;
+- (GLKMatrix4) getModelMatrix;
 
-- (void) set_order: (unsigned int) order;
-- (void) use_control_points: (bool) use;
+// return Point3D[]
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end withSegments: (unsigned int) count;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end withMinAngle: (float) angle;
 
-- (GLKMatrix4x4) get_model_matrix;
-
-- (Point3D) get_point_at_t: (float) t;
-
-- (Point3D[]) get_line_from: (float) t_start to: (float) t_end with_segments: (unsigned int) count;
-- (Point3D[]) get_line_from: (float) t_start to: (float) t_end with_min_angle: (float) angle;
+- (void) _getLineRecursive: (NSArray *) resylt From: (float) t_start To: (float) t_end withMinAngle: (float) angle;
 
 @end
+
 
 // Поверхность
 @interface Surface: NSObject
 
-@protected
-@property unsigned int  order_u_;
-@property unsigned int  order_v_;
-@property Point3D[]      points_;
-@property GLKMatrix4x4 model_matrix_;
+- (Point3D)    getPointAtUV: (PointUV) point;
+- (GLKMatrix4) getModelMatrix;
 
-- (void) set_order: (unsigned int) order;
-- (void) use_control_points: (bool) use;
-
-- (GLKMatrix4x4) get_model_matrix;
-
-- (Point3D) get_point_at_u: (float) u and_v: (float) v;
-- (Point3D) get_point_at_uv: (PointUV) point;
-
-- () get_surface
+- (id) getSurface: (PointUV *) points ;
 
 @end
