@@ -1,41 +1,40 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<diagram program="umlet" version="14.2">
-  <zoom_level>10</zoom_level>
+<diagram program="umlet" version="13.2">
+  <zoom_level>9</zoom_level>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>1070</x>
-      <y>40</y>
-      <w>170</w>
-      <h>70</h>
+      <x>927</x>
+      <y>216</y>
+      <w>225</w>
+      <h>126</h>
     </coordinates>
-    <panel_attributes>Object
+    <panel_attributes>Mesh
 --
--indices: uint[]
--data:    Vertex[]
 --
+/+get_model_matrix(): Matrix4x4/
+/+get_material(): Material/
+/+get_primitive_type(): uint (GLTRIANGLE)
+
+/+get_data(): Vetrex[]/
+/+get_indices(): uint[]/
+/+get_color_map(): Color[]/
+
 </panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>50</x>
-      <y>270</y>
-      <w>560</w>
-      <h>280</h>
+      <x>18</x>
+      <y>216</y>
+      <w>360</w>
+      <h>189</h>
     </coordinates>
     <panel_attributes>Curve
 --
-#order:  uint
-#knots:  int[]
-#points: Point3D[]
 --
-+set_order(order: uint)
-+use_control_points(use: bool)
-
 /+get_model_matrix(): Matrix4x4/
-
 /+get_point(t: float): Point3D/
 
 Алгоритм построения линии на основе простых сечений
@@ -46,16 +45,16 @@
 /+get_line(t_start:   float, t_end: float,/
 /          min_angle: float): Point3D[]/
 
-</panel_attributes>
+/+to_mesh(t_start:float, t_end: float): Mesh/</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>660</x>
-      <y>30</y>
-      <w>210</w>
-      <h>90</h>
+      <x>567</x>
+      <y>0</y>
+      <w>189</w>
+      <h>81</h>
     </coordinates>
     <panel_attributes>Vertex
 --
@@ -68,10 +67,10 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>50</x>
-      <y>30</y>
-      <w>120</w>
-      <h>60</h>
+      <x>18</x>
+      <y>0</y>
+      <w>108</w>
+      <h>54</h>
     </coordinates>
     <panel_attributes>Point2D
 --
@@ -82,10 +81,10 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>350</x>
-      <y>30</y>
-      <w>120</w>
-      <h>70</h>
+      <x>288</x>
+      <y>0</y>
+      <w>108</w>
+      <h>63</h>
     </coordinates>
     <panel_attributes>Point3D
 --
@@ -97,10 +96,10 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>500</x>
-      <y>30</y>
-      <w>130</w>
-      <h>90</h>
+      <x>423</x>
+      <y>0</y>
+      <w>117</w>
+      <h>81</h>
     </coordinates>
     <panel_attributes>ColorRGB
 --
@@ -113,10 +112,10 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>200</x>
-      <y>30</y>
-      <w>120</w>
-      <h>60</h>
+      <x>153</x>
+      <y>0</y>
+      <w>108</w>
+      <h>54</h>
     </coordinates>
     <panel_attributes>PointUV
 --
@@ -127,45 +126,44 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>710</x>
-      <y>270</y>
-      <w>660</w>
-      <h>280</h>
+      <x>513</x>
+      <y>216</y>
+      <w>378</w>
+      <h>189</h>
     </coordinates>
     <panel_attributes>Surface
 --
-#order_u: uint
-#order_v: uint
-#points:  Point3D[]
 --
-+set_order(order: uint)
-+use_control_points(use: bool)
-
 /+get_model_matrix(): Matrix4x4/
 
 /+get_point(u: float, v: float): Point3D/
 /+get_point(uv_point: float[2]): Point3D //Сюда можно передать и PointUV/
 
 Алгоритм построения линии на основе простых сечений
-/+get_surface(uv_points: PointUV[], segment_count: uint): /
+/+get_surface(uv_points: PointUV[], segment_count: uint): Point3D[]/
           
 Алгоритм построения на основе расчета угла между отрезками
-/+get_surface(uv_points: PointUV[], min_angle: float): /</panel_attributes>
+/+get_surface(uv_points: PointUV[], min_angle: float): Point3D[]/
+
+/+to_mesh(uv_points: PointUV[], min_angle: float): Mesh/</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>750</x>
-      <y>600</y>
-      <w>220</w>
-      <h>110</h>
+      <x>477</x>
+      <y>441</y>
+      <w>198</w>
+      <h>126</h>
     </coordinates>
     <panel_attributes>BookPage
 --
 -smth: Curve[]
--flp_over: Curve[]
+-flip_over: Curve[]
 --
+/+get_model_matrix(): Matrix4x4/
+/+get_point(t: float): Point3D/
+
 +do_smth(t: float)
 +do_flip_over(t: float)</panel_attributes>
     <additional_attributes/>
@@ -173,27 +171,30 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>850</x>
-      <y>540</y>
-      <w>30</w>
-      <h>80</h>
+      <x>567</x>
+      <y>396</y>
+      <w>27</w>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;60.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;50.0</additional_attributes>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>1050</x>
-      <y>640</y>
-      <w>270</w>
-      <h>110</h>
+      <x>702</x>
+      <y>477</y>
+      <w>207</w>
+      <h>126</h>
     </coordinates>
     <panel_attributes>BookCover
 --
 -smth: Curve[]
 -smth_else: Curve[]
 --
+/+get_model_matrix(): Matrix4x4/
+/+get_point(t: float): Point3D/
+
 +do_open(t: float)
 +do_smth_else(t: float)</panel_attributes>
     <additional_attributes/>
@@ -201,73 +202,87 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>1170</x>
-      <y>540</y>
-      <w>30</w>
-      <h>120</h>
+      <x>810</x>
+      <y>396</y>
+      <w>27</w>
+      <h>99</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;100.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;90.0</additional_attributes>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>80</x>
-      <y>600</y>
-      <w>170</w>
-      <h>70</h>
+      <x>0</x>
+      <y>432</y>
+      <w>162</w>
+      <h>144</h>
     </coordinates>
     <panel_attributes>SomeCurve
 --
+-order:  uint
+-knots:  int[]
+-points: Point3D[]
+
 -smth: Curve[]
 --
+/+get_model_matrix(): Matrix4x4/
+/+get_point(t: float): Point3D/
+
 +do_smth(t: float)</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>350</x>
-      <y>600</y>
-      <w>230</w>
-      <h>70</h>
+      <x>216</x>
+      <y>432</y>
+      <w>171</w>
+      <h>144</h>
     </coordinates>
     <panel_attributes>SomeAnotherCurve
 --
+-order:  uint
+-knots:  int[]
+-points: Point3D[]
+
 -smth_else: Curve[]
 --
+/+get_model_matrix(): Matrix4x4/
+/+get_point(t: float): Point3D/
+
 +do_smth_else(t: float)</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>150</x>
-      <y>540</y>
-      <w>30</w>
-      <h>80</h>
+      <x>63</x>
+      <y>396</y>
+      <w>27</w>
+      <h>54</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;60.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;40.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>450</x>
-      <y>540</y>
-      <w>30</w>
-      <h>80</h>
+      <x>306</x>
+      <y>396</y>
+      <w>27</w>
+      <h>54</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;60.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;40.0</additional_attributes>
   </element>
   <element>
     <id>UMLNote</id>
     <coordinates>
-      <x>140</x>
-      <y>720</y>
-      <w>380</w>
-      <h>160</h>
+      <x>27</x>
+      <y>621</y>
+      <w>342</w>
+      <h>144</h>
     </coordinates>
     <panel_attributes>Алгоритм построения ломанной
 по кривой по умолчанию у всех одинковый
@@ -284,21 +299,21 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>190</x>
-      <y>660</y>
-      <w>140</w>
-      <h>80</h>
+      <x>99</x>
+      <y>567</y>
+      <w>99</w>
+      <h>72</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
-    <additional_attributes>10.0;10.0;120.0;60.0</additional_attributes>
+    <additional_attributes>10.0;10.0;90.0;60.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>300</x>
-      <y>660</y>
-      <w>140</w>
-      <h>80</h>
+      <x>171</x>
+      <y>567</y>
+      <w>126</w>
+      <h>72</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
     <additional_attributes>120.0;10.0;10.0;60.0</additional_attributes>
@@ -306,10 +321,10 @@
   <element>
     <id>UMLNote</id>
     <coordinates>
-      <x>90</x>
-      <y>160</y>
-      <w>470</w>
-      <h>70</h>
+      <x>36</x>
+      <y>117</y>
+      <w>333</w>
+      <h>63</h>
     </coordinates>
     <panel_attributes>get_model_matrix() - виртуальный метод потому,
 что анимация может просто менять модельную матрицу?
@@ -320,10 +335,10 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>330</x>
-      <y>220</y>
-      <w>30</w>
-      <h>70</h>
+      <x>189</x>
+      <y>171</y>
+      <w>27</w>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
     <additional_attributes>10.0;50.0;10.0;10.0</additional_attributes>
@@ -331,23 +346,82 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>600</x>
-      <y>390</y>
-      <w>170</w>
-      <h>290</h>
+      <x>369</x>
+      <y>324</y>
+      <w>126</w>
+      <h>216</h>
     </coordinates>
     <panel_attributes>lt=&lt;.</panel_attributes>
-    <additional_attributes>10.0;10.0;60.0;10.0;60.0;270.0;150.0;270.0</additional_attributes>
+    <additional_attributes>10.0;10.0;100.0;10.0;100.0;220.0;120.0;220.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>600</x>
-      <y>390</y>
-      <w>470</w>
-      <h>360</h>
+      <x>369</x>
+      <y>324</y>
+      <w>351</w>
+      <h>279</h>
     </coordinates>
     <panel_attributes>lt=&lt;.</panel_attributes>
-    <additional_attributes>10.0;10.0;60.0;10.0;60.0;340.0;450.0;340.0</additional_attributes>
+    <additional_attributes>10.0;10.0;100.0;10.0;100.0;290.0;370.0;290.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>954</x>
+      <y>441</y>
+      <w>171</w>
+      <h>63</h>
+    </coordinates>
+    <panel_attributes>BookRightSide
+--
+indices: uint[];
+data: Vertext[];
+--</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>UMLNote</id>
+    <coordinates>
+      <x>1179</x>
+      <y>441</y>
+      <w>252</w>
+      <h>63</h>
+    </coordinates>
+    <panel_attributes>При этом каждая вершина будет содержать PointUV - текстурные координаты и координаты точки на плоскости, поэтому каждая точка может быть легко пересчитанна</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1116</x>
+      <y>468</y>
+      <w>81</w>
+      <h>27</h>
+    </coordinates>
+    <panel_attributes>lt=-</panel_attributes>
+    <additional_attributes>10.0;10.0;70.0;10.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>1026</x>
+      <y>333</y>
+      <w>27</w>
+      <h>126</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;10.0;120.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>882</x>
+      <y>351</y>
+      <w>171</w>
+      <h>108</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;170.0;10.0;170.0;100.0</additional_attributes>
   </element>
 </diagram>

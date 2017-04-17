@@ -1,13 +1,15 @@
 #import "Math.h"
 
+static const float MIN_DELTA_T = .000001f;
+
 @implementation NSValue (Point3D)
 
-+ (instancetype) valueWithPoint3D: (Point3D) value
++ (NSValue *) valueWithPoint3D: (Point3D) value
 {
     return [self valueWithBytes:&value objCType:@encode(Point3D)];
 }
 
-- (Point3D) value
+- (Point3D) point3Dvalue
 {
     Point3D value;
     [self getValue: &value];
@@ -52,6 +54,14 @@ Point3D QuadricBezierCurve(const Point3D points[5], float t)
     return result;
 };
 
+float absf(float value)
+{
+    if (value >= 0)
+        return value;
+    
+    return -1 * value;
+}
+
 
 @implementation Curve
 
@@ -95,41 +105,48 @@ Point3D QuadricBezierCurve(const Point3D points[5], float t)
     
     int points_count = [self getPointsCount];
     float delta = (t_end - t_start) / points_count;
-    float half_delta = delta/2;
     
     [result addObject: [NSValue valueWithPoint3D: [self getPointAt: t_start]]];
-    
     for (int index = 0; index < points_count; index++)
-    {
-        float tmp_delta = delta * index;
-        Point3D start_point =  [self getPointAt:t_start + tmp_delta];
-        Point3D end_point =    [self getPointAt:t_start + tmp_delta + delta];
-        Point3D middle_point = [self getPointAt:t_start + tmp_delta + half_delta];
-        
-        if (getAngleBetween() > angle)
-            continue;
-        
-        {
-            [result addObject: [NSValue valueWithPoint3D: start_point]];
-        }
-    }
-    
-    
-    [result addObject: [NSValue valueWithPoint3D: [self getPointAt: t_start]]];
-
-    
-    float t_middle = (t_end - t_start) / 2;
-    
-    
+        [self getLineRecursive:result From:t_start + delta * index To:t_start + delta * (index + 1) withMinAngle:angle];
     
     [result addObject: [NSValue valueWithPoint3D: [self getPointAt: t_end]]];
     
     return result;
 }
 
-- (void) _getLineRecursive: (NSArray *) resylt From: (float) t_start To: (float) t_end withMinAngle: (float) angle
+- (void) getLineRecursive: (NSMutableArray *) result From: (float) t_start To: (float) t_end withMinAngle: (float) angle
 {
+    if (absf(t_end - t_start) <=  MIN_DELTA_T)
+        return;
     
+    float t_middle = (t_start - t_end) / 2;
+    
+    Point3D start_point  = [[result lastObject] point3Dvalue];
+    Point3D end_point    = [self getPointAt:t_end];
+    Point3D middle_point = [self getPointAt:t_middle];
+    
+    Point3D vector_me = { end_point.x - middle_point.x,
+                          end_point.y - middle_point.y,
+                          end_point.z - middle_point.z };
+    
+    Point3D vector_ms = { start_point.x - middle_point.x,
+                          start_point.y - middle_point.y,
+                          start_point.z - middle_point.z };
+    
+    float angle_between_points = (vector_me.x*vector_ms.x + vector_me.y*vector_ms.z + vector_me.x*vector_ms.z) /
+                                 (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2) *
+                                  sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2))));
+    
+    if (absf(angle_between_points) > cosf(angle))
+    {
+        [self getLineRecursive: result From: t_start To: t_middle withMinAngle: angle];
+        
+        [result addObject: [NSValue valueWithPoint3D: middle_point]];
+        [self getLineRecursive: result From: t_middle To: t_end withMinAngle: angle];
+    }
+    else
+        [result addObject: [NSValue valueWithPoint3D: middle_point]];
 }
 
 @end
