@@ -5,31 +5,31 @@ typedef struct
 {
     float x;
     float y;
-} Point2D;
+} FBPoint2D;
 
 typedef struct
 {
     float u;
     float v;
-} PointUV;
+} FBPointUV;
 
 typedef struct
 {
     float x;
     float y;
     float z;
-} Point3D;
+} FBPoint3D;
 
-Point3D addPoint3D(Point3D rv, Point3D lv);
-Point3D divPoint3D(Point3D rv, Point3D lv);
-Point3D multPoint3D(Point3D rv, Point3D lv);
+FBPoint3D addPoint3D(FBPoint3D rv,FBPoint3D lv);
+FBPoint3D divPoint3D(FBPoint3D rv,FBPoint3D lv);
+FBPoint3D multPoint3D(FBPoint3D rv,FBPoint3D lv);
 
 typedef struct
 {
     float r;
     float g;
     float b;
-} ColorRGB;
+} FBColorRGB;
 
 typedef struct
 {
@@ -37,55 +37,80 @@ typedef struct
     float g;
     float b;
     float alpha;
-} ColorRGBA;
+} FBColorRGBA;
 
 typedef struct
 {
-    Point3D    coord;
-    ColorRGBA  color;
-    Point3D    normal;
-    PointUV    textureCoord;
-} Vertext;
+    FBPoint3D    coord;
+    FBPoint3D    normal;
+    FBPointUV    textureCoord;
+} FBVertext;
 
-@interface NSValue (Point3D)
+typedef struct
+{
+    FBPoint3D    coord;
+    FBColorRGBA  color;
+    FBPoint3D    normal;
+    FBPointUV    textureCoord;
+} FBVertextColor;
 
-+ (NSValue *) valueWithPoint3D: (Point3D) value;
+@interface NSValue (FBPoint3D)
 
-@property (readonly) Point3D point3Dvalue;
++ (NSValue *) valueWithFBPoint3D: (FBPoint3D) value;
+
+@property (readonly) FBPoint3D FBPoint3D;
 
 @end
 
-Point3D LinearBezierCurve(const Point3D points[2], float t);
-Point3D QuadraticBezierCurve(const Point3D points[3], float t);
-Point3D CubicBezierCurve(const Point3D points[4], float t);
-Point3D QuadricBezierCurve(const Point3D points[5], float t);
-Point3D QuinticBezierCurve(const Point3D points[6], float t);
+FBPoint3D LinearBezierCurve(const FBPoint3D points[2], float t);
+FBPoint3D QuadraticBezierCurve(const FBPoint3D points[3], float t);
+FBPoint3D CubicBezierCurve(const FBPoint3D points[4], float t);
+FBPoint3D QuadricBezierCurve(const FBPoint3D points[5], float t);
+FBPoint3D QuinticBezierCurve(const FBPoint3D points[6], float t);
 
 float absf(float value);
 
+@interface BFObject: NSObject
+- (GLKMatrix4) getModelMatrix;
+@end
 
 // Кривая
-@interface Curve : NSObject
-
-- (int)        getPointsCount;
-- (Point3D)    getPointAt: (float) t;
-- (GLKMatrix4) getModelMatrix;
-
-// return Point3D[]
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end withSegments: (unsigned int) count;
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end withMinAngle: (float) angle;
-
-- (void) getLineRecursive: (NSMutableArray *) result From: (float) t_start To: (float) t_end withMinAngle: (float) angle;
-
+@protocol FBCurve
+- (FBPoint3D) getPointAt:  (float) t;
+- (FBPoint3D) getPointAt:  (float) t OnSpline: (int)   spline;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int)   count;                        // return FBPoint3D[]
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle;                        // return FBPoint3D[]
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int)   count OnSpline: (int) spline; // return FBPoint3D[]
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle OnSpline: (int) spline; // return FBPoint3D[]
 @end
 
 
 // Поверхность
-@interface Surface: NSObject
+@protocol FBSurface
+- (FBPoint3D) getPointAt:         (FBPointUV)   point;
+- (FBPoint3D) getPointAt:         (FBPointUV)   point  OnSpline:     (int)   spline;
+- (NSArray *) getLineByPoints:    (FBPointUV *) points WithSegments: (int)   count;                        // return FBPoint3D[]
+- (NSArray *) getLineByPoints:    (FBPointUV *) points WithMinAngle: (float) angle;                        // return FBPoint3D[]
+- (NSArray *) getSurfaceByPoints: (FBPointUV *) points WithSegments: (int)   count;                        // return FBPoint3D[]
+- (NSArray *) getSurfaceByPoints: (FBPointUV *) points WithMinAngle: (float) angle;                        // return FBPoint3D[]
+- (NSArray *) getLineByPoints:    (FBPointUV *) points WithSegments: (int)   count OnSpline: (int) spline; // return FBPoint3D[]
+- (NSArray *) getLineByPoints:    (FBPointUV *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return FBPoint3D[]
+- (NSArray *) getSurfaceByPoints: (FBPointUV *) points WithSegments: (int)   count OnSpline: (int) spline; // return FBPoint3D[]
+- (NSArray *) getSurfaceByPoints: (FBPointUV *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return FBPoint3D[]
+@end
 
-- (Point3D)    getPointAtUV: (PointUV) point;
-- (GLKMatrix4) getModelMatrix;
+@interface FBSpline : NSObject
+{
+    FBPoint3D *m_points;
+    unsigned int m_order;
+    unsigned int m_count;
+}
 
-- (id) getSurface: (PointUV *) points ;
+- (id) initWithPoints: (FBPoint3D *) points Count: (unsigned int) count Order: (unsigned int) order;
+- (void) dealloc;
+
+- (FBPoint3D) getPointAt:  (float) t;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int)   count;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle;
 
 @end

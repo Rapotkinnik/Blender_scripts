@@ -704,7 +704,66 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             image = mesh.uv_textures.active.data
 
     @staticmethod
-    def export_curve(curve, file, **kwargs): #TODO: Подумать, что сделать с матрицей объекта?
+    def export_curve(curve, file, **kwargs):
+        file.write('@interface %s: FBObject <FBCurve>\n{' % kwargs['name'])
+        file.write('\tNSArray *m_splines;\n')
+        file.write('\tGLKMatrix4 m_objectMatrix;')
+        file.write('}\n')
+        # Здесь методы, реализующие анимацию объекта
+        file.write('@end\n\n')
+
+        file.write('@implementation %s\n' % kwargs['name'])
+        file.write('- (id) init\n'
+                   '{\n\tself = [[super aloc] init];\n'
+                   '\tif (self)\n{\n')
+
+        for index, spline in enumirate(curve.splines):
+            control_points = []
+            file.write('\t\tFBPoint3D points_%d[] = {\n\t\t\t%s\n};\n\n' % (index, ','.join(control_points)))
+
+        file.write('\t\tm_objectMatrix.m = {%s};\n\t}\n}\n' % ','.join(kwargs['matrix_world']))
+        file.write('- (GLKMatrix4) getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n')
+        file.write('- (int) getPointsCountOnSpline: (int) spline\n{\n\treturn [m_splines[spline] getPointAt: ]\n}\n')
+        file.write('- (FBPoint3D) getPointAt: (float) t\n{ return [self getPointAt: t OnSpline: 0];\n}\n')
+        file.write('- (FBPoint3D) getPointAt: (float) t OnSpline: (int) spline\n'
+                   '{\n\tif (t < 0 || t > 1)\n\t{\n'
+                   '     NSException* wrong_t = [NSException'
+                   '                             exceptionWithName:@"WrongTValueException"'
+                   '                             reason:[[NSString alloc] initWithFormat:@"t must be betwine 0 and 1, not %f!", t]'
+                   '                             userInfo:nil];'
+                   '     @throw wrong_t;\n\t}\n\n'
+                   '\tunsigned int segment_count = m_points_count - m_order - 1;\n'
+                   '\tunsigned int segment       = (unsigned int) ceilf(t * segment_count);\n\n'
+                   '\tfloat segment_t = t * segment_count / segment;\n\n')
+        if (curve.splines[0].order_u == 2):
+            file.write('\treturn LinearBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+        if (curve.splines[0].order_u == 3):
+            file.write('\treturn QuadraticBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+        if (curve.splines[0].order_u == 4):
+            file.write('\treturn CubicBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+        if (curve.splines[0].order_u == 5):
+            file.write('\treturn QuadricBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+        if (curve.splines[0].order_u == 5):
+            file.write('\treturn QuinticBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+        file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count\n'
+                   '{\n\treturn [self getLineFrom: t_start To: t_end WithSegments: count OnSpline: 0];\n}\n')
+        file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count OnSpline: (int) spline\n'
+                   '{\n\tNSMutableArray *result = [[NSMutableArray aloc] init];\n'
+                   '\tif (result)\n'
+                   '\t\t[m_curve getLineRecursive: result From: t_start To: t_end WithSegments: count OnSpline: spline];\n'
+                   '\n\treturn result;\n}\n')
+        file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle\n'
+                   '{\n\treturn [self getLineFrom: t_start To: t_end WithMinAngle: angle OnSpline: 0];\n}\n')
+        file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle OnSpline: (int) spline\n'
+                   '{\n\tNSMutableArray *result = [[NSMutableArray aloc] init];\n'
+                   '\tif (result)\n'
+                   '\t\t[m_curve getLineRecursive: result From: t_start To: t_end WithMinAngle: angle OnSpline: spline];\n'
+                   '\n\treturn result;\n}\n')
+
+        file.write('@end')
+
+
+
         return_type = 'CGPoint' if curve.dimensions == '2D' else 'CGPoint3D'
         for spline in curve.splines:
             file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))

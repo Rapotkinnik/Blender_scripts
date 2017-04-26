@@ -4,7 +4,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>927</x>
+      <x>1377</x>
       <y>216</y>
       <w>225</w>
       <h>126</h>
@@ -26,24 +26,25 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>18</x>
-      <y>216</y>
+      <x>441</x>
+      <y>207</y>
       <w>360</w>
-      <h>189</h>
+      <h>198</h>
     </coordinates>
-    <panel_attributes>Curve
+    <panel_attributes>&lt;interface&gt;
+Curve
 --
 --
 /+get_model_matrix(): Matrix4x4/
-/+get_point(t: float): Point3D/
+/+get_point(t: float, spline_index: uint): Point3D/
 
 Алгоритм построения линии на основе простых сечений
 /+get_line(t_start: float, t_end: float,/
-/          segment_count: uint): Point3D[]/
+/          segment_count: uint, spline_index: uint): Point3D[]/
           
 Алгоритм построения на основе расчета угла между отрезками
 /+get_line(t_start:   float, t_end: float,/
-/          min_angle: float): Point3D[]/
+/          min_angle: float, spline_index: uint): Point3D[]/
 
 /+to_mesh(t_start:float, t_end: float): Mesh/</panel_attributes>
     <additional_attributes/>
@@ -51,7 +52,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>567</x>
+      <x>990</x>
       <y>0</y>
       <w>189</w>
       <h>81</h>
@@ -67,7 +68,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>18</x>
+      <x>441</x>
       <y>0</y>
       <w>108</w>
       <h>54</h>
@@ -81,7 +82,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>288</x>
+      <x>711</x>
       <y>0</y>
       <w>108</w>
       <h>63</h>
@@ -96,7 +97,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>423</x>
+      <x>846</x>
       <y>0</y>
       <w>117</w>
       <h>81</h>
@@ -112,7 +113,7 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>153</x>
+      <x>576</x>
       <y>0</y>
       <w>108</w>
       <h>54</h>
@@ -126,24 +127,31 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>513</x>
-      <y>216</y>
-      <w>378</w>
-      <h>189</h>
+      <x>891</x>
+      <y>207</y>
+      <w>441</w>
+      <h>270</h>
     </coordinates>
-    <panel_attributes>Surface
+    <panel_attributes>&lt;interface&gt;
+Surface
 --
 --
 /+get_model_matrix(): Matrix4x4/
 
-/+get_point(u: float, v: float): Point3D/
-/+get_point(uv_point: float[2]): Point3D //Сюда можно передать и PointUV/
+/+get_point(u: float, v: float, spline_index: uint): Point3D/
+/+get_point(uv_point: float[2], spline_index: uint): Point3D/
 
 Алгоритм построения линии на основе простых сечений
-/+get_surface(uv_points: PointUV[], segment_count: uint): Point3D[]/
+/+get_line(points: PointUV[], segment_count: uint, spline_index: uint): Point3D[]/
           
 Алгоритм построения на основе расчета угла между отрезками
-/+get_surface(uv_points: PointUV[], min_angle: float): Point3D[]/
+/+get_line(points: PointUV[], min_angle: float, spline_index: uint): Point3D[]/
+
+Алгоритм построения линии на основе простых сечений
+/+get_surface(uv_points: PointUV[], segment_count: uint, spline_index: uint): Point3D[]/
+          
+Алгоритм построения на основе расчета угла между отрезками
+/+get_surface(uv_points: PointUV[], min_angle: float, spline_index: uint): Point3D[]/
 
 /+to_mesh(uv_points: PointUV[], min_angle: float): Mesh/</panel_attributes>
     <additional_attributes/>
@@ -151,8 +159,8 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>477</x>
-      <y>441</y>
+      <x>900</x>
+      <y>522</y>
       <w>198</w>
       <h>126</h>
     </coordinates>
@@ -171,19 +179,19 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>567</x>
-      <y>396</y>
+      <x>990</x>
+      <y>468</y>
       <w>27</w>
-      <h>63</h>
+      <h>72</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;50.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;60.0</additional_attributes>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>702</x>
-      <y>477</y>
+      <x>1125</x>
+      <y>558</y>
       <w>207</w>
       <h>126</h>
     </coordinates>
@@ -202,19 +210,19 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>810</x>
-      <y>396</y>
+      <x>1233</x>
+      <y>468</y>
       <w>27</w>
-      <h>99</h>
+      <h>108</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;90.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;100.0</additional_attributes>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>0</x>
-      <y>432</y>
+      <x>423</x>
+      <y>441</y>
       <w>162</w>
       <h>144</h>
     </coordinates>
@@ -235,8 +243,8 @@
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>216</x>
-      <y>432</y>
+      <x>639</x>
+      <y>441</y>
       <w>171</w>
       <h>144</h>
     </coordinates>
@@ -257,29 +265,29 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>63</x>
+      <x>486</x>
       <y>396</y>
       <w>27</w>
-      <h>54</h>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;40.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;50.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>306</x>
+      <x>729</x>
       <y>396</y>
       <w>27</w>
-      <h>54</h>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;10.0;40.0</additional_attributes>
+    <additional_attributes>10.0;10.0;10.0;50.0</additional_attributes>
   </element>
   <element>
     <id>UMLNote</id>
     <coordinates>
-      <x>27</x>
+      <x>450</x>
       <y>621</y>
       <w>342</w>
       <h>144</h>
@@ -299,29 +307,29 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>99</x>
-      <y>567</y>
+      <x>522</x>
+      <y>576</y>
       <w>99</w>
-      <h>72</h>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
-    <additional_attributes>10.0;10.0;90.0;60.0</additional_attributes>
+    <additional_attributes>10.0;10.0;90.0;50.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>171</x>
-      <y>567</y>
+      <x>594</x>
+      <y>576</y>
       <w>126</w>
-      <h>72</h>
+      <h>63</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
-    <additional_attributes>120.0;10.0;10.0;60.0</additional_attributes>
+    <additional_attributes>120.0;10.0;10.0;50.0</additional_attributes>
   </element>
   <element>
     <id>UMLNote</id>
     <coordinates>
-      <x>36</x>
+      <x>459</x>
       <y>117</y>
       <w>333</w>
       <h>63</h>
@@ -335,40 +343,40 @@
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>189</x>
+      <x>612</x>
       <y>171</y>
       <w>27</w>
-      <h>63</h>
+      <h>54</h>
     </coordinates>
     <panel_attributes>lt=.</panel_attributes>
-    <additional_attributes>10.0;50.0;10.0;10.0</additional_attributes>
+    <additional_attributes>10.0;40.0;10.0;10.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>369</x>
+      <x>792</x>
       <y>324</y>
       <w>126</w>
-      <h>216</h>
+      <h>297</h>
     </coordinates>
     <panel_attributes>lt=&lt;.</panel_attributes>
-    <additional_attributes>10.0;10.0;100.0;10.0;100.0;220.0;120.0;220.0</additional_attributes>
+    <additional_attributes>10.0;10.0;60.0;10.0;60.0;310.0;120.0;310.0</additional_attributes>
   </element>
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>369</x>
+      <x>792</x>
       <y>324</y>
       <w>351</w>
-      <h>279</h>
+      <h>360</h>
     </coordinates>
     <panel_attributes>lt=&lt;.</panel_attributes>
-    <additional_attributes>10.0;10.0;100.0;10.0;100.0;290.0;370.0;290.0</additional_attributes>
+    <additional_attributes>10.0;10.0;60.0;10.0;60.0;380.0;370.0;380.0</additional_attributes>
   </element>
   <element>
     <id>UMLClass</id>
     <coordinates>
-      <x>954</x>
+      <x>1404</x>
       <y>441</y>
       <w>171</w>
       <h>63</h>
@@ -383,7 +391,7 @@ data: Vertext[];
   <element>
     <id>UMLNote</id>
     <coordinates>
-      <x>1179</x>
+      <x>1629</x>
       <y>441</y>
       <w>252</w>
       <h>63</h>
@@ -394,7 +402,7 @@ data: Vertext[];
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>1116</x>
+      <x>1566</x>
       <y>468</y>
       <w>81</w>
       <h>27</h>
@@ -405,7 +413,7 @@ data: Vertext[];
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>1026</x>
+      <x>1476</x>
       <y>333</y>
       <w>27</w>
       <h>126</h>
@@ -416,12 +424,49 @@ data: Vertext[];
   <element>
     <id>Relation</id>
     <coordinates>
-      <x>882</x>
-      <y>351</y>
-      <w>171</w>
-      <h>108</h>
+      <x>1323</x>
+      <y>378</y>
+      <w>180</w>
+      <h>81</h>
     </coordinates>
     <panel_attributes>lt=&lt;&lt;-</panel_attributes>
-    <additional_attributes>10.0;10.0;170.0;10.0;170.0;100.0</additional_attributes>
+    <additional_attributes>10.0;10.0;180.0;10.0;180.0;70.0</additional_attributes>
+  </element>
+  <element>
+    <id>UMLClass</id>
+    <coordinates>
+      <x>252</x>
+      <y>441</y>
+      <w>108</w>
+      <h>54</h>
+    </coordinates>
+    <panel_attributes>Spline
+--
++order: uint
++points: Points3D[];
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>297</x>
+      <y>270</y>
+      <w>162</w>
+      <h>189</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;-</panel_attributes>
+    <additional_attributes>160.0;10.0;10.0;10.0;10.0;190.0</additional_attributes>
+  </element>
+  <element>
+    <id>Relation</id>
+    <coordinates>
+      <x>351</x>
+      <y>459</y>
+      <w>90</w>
+      <h>27</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;&lt;&lt;&lt;-</panel_attributes>
+    <additional_attributes>10.0;10.0;80.0;10.0</additional_attributes>
   </element>
 </diagram>
