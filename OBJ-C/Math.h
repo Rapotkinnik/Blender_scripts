@@ -1,5 +1,4 @@
 #import <GLKit/GLKit.h>
-#import <CoreFoundation/CFArray.h>
 
 typedef struct
 {

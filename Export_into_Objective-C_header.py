@@ -324,6 +324,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             for obj in objects:
                 if self.prop_export_curve_as_function and obj.type == 'CURVE':
+                    with open(os.path.join(dir_path, '%s.h' % obj.name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
+                        object_file.write('#import "Math.h"\n\n')
+                        self.export_curve(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
+
+                        continue
                 else:
                     try:
                         mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
@@ -389,46 +394,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    '\tGLfloat position[4];\n'
                    '\tGLfloat direction[4];\n'
                    '} Light;\n\n')
-
-        # Write Bezier polynoms
-        file.write('CGPoint LinearBezierCurve(const CGPoint[2] &points, float t)\n{\n'
-                   '\tCGPoint result;\n'
-                   '\tresult.x = (1 - t)*points[0].x + t*points[1].x;\n'
-                   '\tresult.y = (1 - t)*points[0].y + t*points[1].y;\n'
-                   '\treturn result;\n};\n\n')
-
-        file.write('CGPoint QuadraticBezierCurve(const CGPoint[3] &points, float t)\n{\n'
-                   '\tCGPoint result;\n'
-                   '\tresult.x = pow(1 - t, 2)*points[0].x + 2*t*(1 - t)*points[1].x + 2*t*t*points[2].x;\n'
-                   '\tresult.y = pow(1 - t, 2)*points[0].y + 2*t*(1 - t)*points[1].y + 2*t*t*points[2].y;\n'
-                   '\treturn result;\n};\n\n')
-
-        file.write('CGPoint CubicBezierCurve(const CGPoint[4] &points, float t)\n{')
-        file.write('\tCGPoint result;\n')
-        file.write('\tresult.x = pow(1 - t, 3)*points[0].x + 3*pow(1 - t, 2)*t*points[1].x + '
-                   '3*(1 - t)*t*t*points[2].x + pow(t, 3)*point[3].x;\n')
-        file.write('\tresult.y = pow(1 - t, 3)*points[0].y + 3*pow(1 - t, 2)*t*points[1].y + '
-                   '3*(1 - t)*t*t*points[2].y + pow(t, 3)*point[3].y;\n')
-        file.write('\treturn result;\n};\n\n')
-
-        file.write('CGPoint QuadricBezierCurve(const CGPoint[5] &points, float t)\n{\n')
-        file.write('\tCGPoint result;\n')
-        file.write('\tresult.x = pow(1 - t, 4)*points[0].x + 4*pow(1 - t, 3)*t*points[1].x + '
-                   '6*pow(1 - t, 2)*t*t*points[2].x + 4*pow(t, 3)*(1 - t)*point[3].x + pow(t, 4)*points[4].x;\n')
-        file.write('\tresult.y = pow(1 - t, 4)*points[0].y + 4*pow(1 - t, 3)*t*points[1].y + '
-                   '6*pow(1 - t, 2)*t*t*points[2].y + 4*pow(t, 3)*(1 - t)*point[3].y + pow(t, 4)*points[4].y;\n')
-        file.write('\treturn result;\n};\n\n')
-
-        file.write('CGPoint QuinticBezierCurve(const CGPoint[6] &points, float t)\n{\n')
-        file.write('\tCGPoint result;\n')
-        file.write('\treturn result;\n};\n\n')
-
-        # Write adaptive curve builder function
-        # TODO: обязательно добавить в массив опорные точки, потмоу что они могут сильно влиять на кривую (свободные плечи)
-        file.write('NSArray BuildCurve(CGPoint (*curve)(float t))\n{\n'
-                   '\tCGPoint p0 = curve(0.0);\n'
-                   '\tCGPoint p1 = curve(0.5);\n'
-                   '\tCGPoint p2 = curve(1.0);\n')
 
 
     '''
@@ -705,65 +670,77 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
     @staticmethod
     def export_curve(curve, file, **kwargs):
-        file.write('@interface %s: FBObject <FBCurve>\n{' % kwargs['name'])
+        file.write('@interface FB%s: FBObject <FBCurve>\n{\n' % kwargs['name'])
         file.write('\tNSArray *m_splines;\n')
-        file.write('\tGLKMatrix4 m_objectMatrix;')
-        file.write('}\n')
+        file.write('\tGLKMatrix4 m_objectMatrix;\n')
+        file.write('}\n\n')
         # Здесь методы, реализующие анимацию объекта
         file.write('@end\n\n')
 
-        file.write('@implementation %s\n' % kwargs['name'])
-        file.write('- (id) init\n'
-                   '{\n\tself = [[super aloc] init];\n'
-                   '\tif (self)\n{\n')
+        file.write('@implementation FB%s\n' % kwargs['name'])
+        file.write('- (id) init\n{\n'
+                   '\tself = [[super alloc] init];\n'
+                   '\tif (self)\n\t{\n')
 
-        for index, spline in enumirate(curve.splines):
-            control_points = []
-            file.write('\t\tFBPoint3D points_%d[] = {\n\t\t\t%s\n};\n\n' % (index, ','.join(control_points)))
+        point_count_array = []
+        for index, spline in enumerate(curve.splines):
+            result_str = ''
+            if spline.type == 'BEZIER':
+                bezier_points = list(spline.bezier_points)
+                if spline.use_cyclic_u:
+                    bezier_points.append(spline.bezier_points[0])
 
-        file.write('\t\tm_objectMatrix.m = {%s};\n\t}\n}\n' % ','.join(kwargs['matrix_world']))
-        file.write('- (GLKMatrix4) getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n')
-        file.write('- (int) getPointsCountOnSpline: (int) spline\n{\n\treturn [m_splines[spline] getPointAt: ]\n}\n')
-        file.write('- (FBPoint3D) getPointAt: (float) t\n{ return [self getPointAt: t OnSpline: 0];\n}\n')
+                point_count_array.append(len(bezier_points) * 2);
+                for p_index in range(len(bezier_points) - 1):
+                    result_str += '\t\t\t'
+                    result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[p_index].co))
+                    result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[p_index].handle_right)) + '\n\t\t\t'
+                    result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[p_index + 1].handle_left))
+                    result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[p_index + 1].co)) + '\n'
+                else:
+                    result_str = result_str[:-3]
+
+            '''       
+            # https://www.codeproject.com/Articles/996281/NURBS-curve-made-easy
+            if spline.type == 'NURBS':
+                bezier_points = list(spline.points)
+                if spline.use_cyclic_u:
+                    bezier_points.append(spline.points[0])
+
+                knots = [0]
+                for index, point in enumerate(bezier_points):
+                    knots.append(knots[index] + point.weight)
+            '''
+
+            file.write('\t\tFBPoint3D points_%d[] = {\n%s\n\t\t};\n\n' % (index, result_str))
+
+        for index, _ in enumerate(curve.splines):
+            file.write('\t\t[m_splines addObject: [[FBSpline aloc] initWithPoints: points_%d Count: %d Order: %d];\n' %
+                       (index, point_count_array[index], 4 if spline.type == 'BEZIER' else spline.order_u))
+
+        matrix  = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][2])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][3]))
+
+        file.write('\n\t\t m_objectMatrix = GLKMatrix4Make(%s);\n\t}\n\n\treturn self;\n}\n\n' % matrix)
+        file.write('- (GLKMatrix4) getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n\n')
+        file.write('- (FBPoint3D) getPointAt: (float) t\n{\n\treturn [self getPointAt: t OnSpline: 0];\n}\n\n')
         file.write('- (FBPoint3D) getPointAt: (float) t OnSpline: (int) spline\n'
-                   '{\n\tif (t < 0 || t > 1)\n\t{\n'
-                   '     NSException* wrong_t = [NSException'
-                   '                             exceptionWithName:@"WrongTValueException"'
-                   '                             reason:[[NSString alloc] initWithFormat:@"t must be betwine 0 and 1, not %f!", t]'
-                   '                             userInfo:nil];'
-                   '     @throw wrong_t;\n\t}\n\n'
-                   '\tunsigned int segment_count = m_points_count - m_order - 1;\n'
-                   '\tunsigned int segment       = (unsigned int) ceilf(t * segment_count);\n\n'
-                   '\tfloat segment_t = t * segment_count / segment;\n\n')
-        if (curve.splines[0].order_u == 2):
-            file.write('\treturn LinearBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
-        if (curve.splines[0].order_u == 3):
-            file.write('\treturn QuadraticBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
-        if (curve.splines[0].order_u == 4):
-            file.write('\treturn CubicBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
-        if (curve.splines[0].order_u == 5):
-            file.write('\treturn QuadricBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
-        if (curve.splines[0].order_u == 5):
-            file.write('\treturn QuinticBezierCurve(&m_points[segment - 1], segment_t);\n}\n')
+                   '{\n\treturn [m_splines[spline] getPointAt: t];\n}\n')
         file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count\n'
-                   '{\n\treturn [self getLineFrom: t_start To: t_end WithSegments: count OnSpline: 0];\n}\n')
+                   '{\n\treturn [self getLineFrom: t_start To: t_end WithSegments: count OnSpline: 0];\n}\n\n')
         file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count OnSpline: (int) spline\n'
-                   '{\n\tNSMutableArray *result = [[NSMutableArray aloc] init];\n'
-                   '\tif (result)\n'
-                   '\t\t[m_curve getLineRecursive: result From: t_start To: t_end WithSegments: count OnSpline: spline];\n'
-                   '\n\treturn result;\n}\n')
+                   '{\n\treturn [m_splines[spline] getLineFrom: t_start To: t_end WithSegments: count];\n}\n\n')
         file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle\n'
-                   '{\n\treturn [self getLineFrom: t_start To: t_end WithMinAngle: angle OnSpline: 0];\n}\n')
+                   '{\n\treturn [self getLineFrom: t_start To: t_end WithMinAngle: angle OnSpline: 0];\n}\n\n')
         file.write('- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle OnSpline: (int) spline\n'
-                   '{\n\tNSMutableArray *result = [[NSMutableArray aloc] init];\n'
-                   '\tif (result)\n'
-                   '\t\t[m_curve getLineRecursive: result From: t_start To: t_end WithMinAngle: angle OnSpline: spline];\n'
-                   '\n\treturn result;\n}\n')
+                   '{\n\treturn [m_splines[spline] getLineFrom: t_start To: t_end WithMinAngle: angle];\n}\n\n')
 
         file.write('@end')
 
 
-
+'''
         return_type = 'CGPoint' if curve.dimensions == '2D' else 'CGPoint3D'
         for spline in curve.splines:
             file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))
@@ -847,7 +824,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t};\n')
             file.write('\treturn CGPointMake(0.0, 0.0);\n};\n\n')
         print(kwargs)
-
+'''
 
 
 

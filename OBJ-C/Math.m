@@ -54,6 +54,12 @@ FBPoint3D QuadricBezierCurve(const FBPoint3D points[5], float t)
     return result;
 };
 
+FBPoint3D QuinticBezierCurve(const FBPoint3D points[6], float t)
+{
+    FBPoint3D result;
+    return result;
+}
+
 float absf(float value)
 {
     if (value >= 0)
@@ -171,10 +177,10 @@ float absf(float value)
     
     if (absf(angle_between_points) > cosf(angle))
     {
-        [self getLineRecursive: result From: t_start To: t_middle WithMinAngle: angle];
+        //[self getLineRecursive: result From: t_start To: t_middle WithMinAngle: angle];
         
         [result addObject: [NSValue valueWithFBPoint3D: middle_point]];
-        [self getLineRecursive: result From: t_middle To: t_end WithMinAngle: angle];
+        //[self getLineRecursive: result From: t_middle To: t_end WithMinAngle: angle];
     }
     else
         [result addObject: [NSValue valueWithFBPoint3D: middle_point]];
