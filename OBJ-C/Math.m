@@ -18,6 +18,57 @@ static const float MIN_DELTA_T = .000001f;
 
 @end
 
+@implementation NSValue (BFPointUV)
+
++ (NSValue *) valueWithBFPointUV: (BFPointUV) value
+{
+    return [self valueWithBytes:&value objCType:@encode(BFPointUV)];
+}
+
+- (BFPointUV) BFPointUV
+{
+    BFPointUV value;
+    [self getValue: &value];
+    return value;
+}
+
+@end
+
+@implementation BFCoordExchanger
+
+- (id) initWithPoints:(BFPointUV)a And:(BFPointUV)b
+{
+    self = [super init];
+    if (self)
+    {
+        m_points[0] = b.v - a.v;
+        m_points[1] = a.u - b.u;
+        m_points[2] = - a.u * m_points[0] - a.v * m_points[1];
+    }
+    
+    return self;
+}
+
+- (id) coordExchangerWithPoints :(BFPointUV)a And:(BFPointUV)b
+{
+#ifdef OBJC_ARC_UNAVAILABLE
+//    return [[[BFCoordExchanger alloc] initWithPoints:a And:b] autorelease];
+#endif
+    return [[BFCoordExchanger alloc] initWithPoints:a And:b];
+}
+
+- (float) vfromu:(float) u
+{
+    return - (m_points[2] + m_points[0] * u) / m_points[1];
+}
+
+- (float) ufromv:(float) v
+{
+    return - (m_points[2] + m_points[1] * v) / m_points[0];
+}
+
+@end
+
 BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t)
 {
     BFPoint3D result;
@@ -68,45 +119,55 @@ float absf(float value)
     return -1 * value;
 }
 
-
 @implementation BFSpline
 
-- (id) initWithPoints: (BFPoint3D *) points Count: (unsigned int) count Order: (unsigned int) order
+- (id) initWithPoints: (NSArray *) points Order: (unsigned int) order
 {
     self = [super init];
     if (self)
     {
-        memccpy(m_points, points, count, sizeof(BFPoint3D));
-        m_count = count;
         m_order = order;
+        m_points = [NSMutableArray arrayWithArray:points];
     }
     
     return self;
 }
 
+- (id) initWithPoints: (BFPoint3D *) points Count: (unsigned int) count Order: (unsigned int) order
+{
+    NSMutableArray *array = [[NSMutableArray alloc] init];
+    for (int i = 0; i < count; i++)
+        [array addObject:[NSValue valueWithBFPoint3D:points[i]]];
+    
+    return [self initWithPoints:array Order:order];
+}
+
 - (void) dealloc
 {
-    free(m_points);
+    [self setPoints:NULL];
 }
 
 - (BFPoint3D) getPointAt: (float) t
 {
-    unsigned int segment_count = m_count - m_order - 1;
+    BFPoint3D points[m_order];
+    unsigned int segment_count = [m_points count] - m_order - 1;
     unsigned int segment       = (unsigned int) ceilf(t * segment_count);
     
     float segment_t = t * segment_count / segment;
+    for (int i = 0; i < m_order; i++)
+        points[i] = [[m_points objectAtIndex:segment + i - 1] BFPoint3D];
     
     switch (m_order) {
         case 2:
-            return LinearBezierCurve(&m_points[segment - 1], segment_t);
+            return LinearBezierCurve(points, segment_t);
         case 3:
-            return QuadraticBezierCurve(&m_points[segment - 1], segment_t);
+            return QuadraticBezierCurve(points, segment_t);
         case 4:
-            return CubicBezierCurve(&m_points[segment - 1], segment_t);
+            return CubicBezierCurve(points, segment_t);
         case 5:
-            return QuadricBezierCurve(&m_points[segment - 1], segment_t);
+            return QuadricBezierCurve(points, segment_t);
         case 6:
-            return QuinticBezierCurve(&m_points[segment - 1], segment_t);
+            return QuinticBezierCurve(points, segment_t);
         default:
             break;
     }
@@ -123,36 +184,52 @@ float absf(float value)
 
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count
 {
-    int point_count = count * m_count - 2;
+    return [self getLineFrom:t_start To:t_end WithSegments:count WithBlock:NULL];
+}
+
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle
+{
+    return [self getLineFrom:t_start To:t_end WithMinAngle:angle WithBlock:NULL];
+}
+
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count WithBlock:(BFPerPointBlock) block
+{
+    int point_count = count * [m_points count] - 2;
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
     
     float delta = (t_end - t_start) / point_count;
     for (int segment = 0; segment < point_count; segment++)
-        [result addObject: [NSValue valueWithBFPoint3D: [self getPointAt: t_start + segment*delta]]];
+    {
+        BFPoint3D point = [self getPointAt: t_start + segment*delta];
+        if (block)
+            block(&point, t_start + segment*delta);
+        
+        [result addObject: [NSValue valueWithBFPoint3D: point]];
+    }
     
     return result;
 }
 
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle WithBlock:(BFPerPointBlock) block
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
     
-    float delta = (t_end - t_start) / m_count;
+    float delta = (t_end - t_start) / [m_points count];
     
     [result addObject: [NSValue valueWithBFPoint3D: [self getPointAt: t_start]]];
-    for (int index = 0; index < m_count; index++)
-        [self getLineRecursive:result From:t_start + delta * index To:t_start + delta * (index + 1) withMinAngle:angle];
+    for (int index = 0; index < [m_points count]; index++)
+        [self getLineRecursive:result From:t_start + delta * index To:t_start + delta * (index + 1) WithMinAngle:angle];
     
     [result addObject: [NSValue valueWithBFPoint3D: [self getPointAt: t_end]]];
     
     return result;
 }
 
-- (void) getLineRecursive: (NSMutableArray *) result From: (float) t_start To: (float) t_end withMinAngle: (float) angle
+- (void) getLineRecursive: (NSMutableArray *) result From: (float) t_start To: (float) t_end WithMinAngle: (float) angle
 {
     if (absf(t_end - t_start) <=  MIN_DELTA_T)
         return;
@@ -171,16 +248,15 @@ float absf(float value)
                             start_point.y - middle_point.y,
                             start_point.z - middle_point.z };
     
-    float angle_between_points = (vector_me.x*vector_ms.x + vector_me.y*vector_ms.z + vector_me.x*vector_ms.z) /
-    (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2) *
-           sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2))));
+    float angle_between_points = (vector_me.x * vector_ms.x + vector_me.y * vector_ms.z + vector_me.x * vector_ms.z) /
+                                 (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2) *
+                                  sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2))));
     
     if (absf(angle_between_points) > cosf(angle))
     {
-        [self getLineRecursive: result From: t_start To: t_middle WithMinAngle: angle];
-        
+        [self getLineRecursive:result From:t_start To:t_middle WithMinAngle:angle];
         [result addObject: [NSValue valueWithBFPoint3D: middle_point]];
-        [self getLineRecursive: result From: t_middle To: t_end WithMinAngle: angle];
+        [self getLineRecursive:result From:t_middle To:t_end WithMinAngle:angle];
     }
     else
         [result addObject: [NSValue valueWithBFPoint3D: middle_point]];
@@ -193,21 +269,84 @@ float absf(float value)
 
 @implementation BFSurfaceSpline
 
-- (id) initWithPoints: (NSArray *) splines Order: (unsigned int) order; // NSArray<BFSpline>
-- (id) initWithPoints: (BFPoint3D *) points CountU: (unsigned int) count_u CountV: (unsigned int) count_v
-                                            OrderU: (unsigned int) order_u OrderV: (unsigned int) order_v;
-- (void) dealloc
+- (id) initWithSplines: (NSArray *) splines Order: (unsigned int) order
 {
-
+    self = [super init];
+    if (self)
+    {
+        [self setSplines:splines];
+        m_order = order;
+    }
+    
+    return self;
 }
 
-- (BFPoint3D) getPointAt:         (BFPointUV)   point;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithMinAngle: (float) angle;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle;
+- (id) initWithPoints: (BFPoint3D *) points CountU: (unsigned int) count_u CountV: (unsigned int) count_v
+                                            OrderU: (unsigned int) order_u OrderV: (unsigned int) order_v
+{
+    NSMutableArray *array = [[NSMutableArray alloc] init];
+    for (int i = 0; i < count_v; i++)
+        [array addObject:[[BFSpline alloc] initWithPoints:(points + i * count_u) Count:count_u Order:order_u]];
+    
+    return [self initWithSplines:array Order:order_v];
+}
+
+- (void) dealloc
+{
+    [self setSplines:NULL];
+}
+
+- (BFPoint3D) getPointAt: (BFPointUV) point
+{
+    NSMutableArray *array = [[NSMutableArray alloc] init];
+    for (BFSpline *spline in m_splines)
+        [array addObject:[NSValue valueWithBFPoint3D:[spline getPointAt:point.u]]];
+    
+    BFSpline *v_spline = [[BFSpline alloc] initWithPoints:array Order:m_order];  // TODO: Ну скорее всего это утечка памяти!=(
+    
+    return [v_spline getPointAt:point.v];
+}
+
+- (NSArray *) getLineByPoints: (NSArray *) points WithSegments: (int) count
+{
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
+}
+
+- (NSArray *) getLineByPoints: (NSArray *) points WithMinAngle: (float) angle
+{
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
+}
+
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int) count
+{
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
+}
+
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle
+{
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
+}
+
+@synthesize splines = m_splines;
 
 @end
+
 
 @implementation BFExtrudedSpline
 
@@ -216,8 +355,8 @@ float absf(float value)
     self = [super init];
     if (self)
     {
-        [self setSpline: spline]
-         m_extrude = extrude;
+        [self setSpline:spline];
+        m_extrude = extrude;
     }
 
     return self;
@@ -225,7 +364,7 @@ float absf(float value)
 
 - (void) dealloc
 {
-    [self setSpline: NULL];
+    [self setSpline:NULL];
 }
 
 - (BFPoint3D) getPointAt: (BFPointUV) point;
@@ -236,41 +375,54 @@ float absf(float value)
     return result;
 }
 
-- (NSArray *) getLineByPoints: (BFPointUV *) points WithSegments: (int) count
+- (NSArray *) getLineByPoints: (NSArray *) points WithSegments: (int) count
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
 
-     for (int i = 0; i < len(points) - 1; i++)
-     {
-        NSArray *segment = [m_spline getLineFrom: points[i].u To: points[i + 1].u WithSegments: count];
-
-        int delta_v = points[i + 1].v - points[i].v
-        for (NSValue *value in segment)
-        {
-            [value ]
-        }
-     }
+    for (int i = 0; i < [points count] - 1; i++)
+    {
+        BFCoordExchanger *exchenger = [[BFCoordExchanger alloc] initWithPoints:[points[i] BFPointUV]
+                                                                           And:[points[i + 1] BFPointUV]];
+        
+        [result addObjectsFromArray: [m_spline getLineFrom:[points[i] BFPointUV].u
+                                                        To:[points[i + 1] BFPointUV].u
+                                              WithSegments:count WithBlock:^(BFPoint3D *point, float t) {
+                                                  point->z += ([exchenger vfromu:t] - 0.5) * m_extrude;
+                                              }]];
+    }
 
     return result;
 }
 
-- (NSArray *) getLineByPoints: (BFPointUV *) points WithMinAngle: (float) angle
+- (NSArray *) getLineByPoints: (NSArray *) points WithMinAngle: (float) angle
 {
-
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
 }
 
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int) count
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int) count
 {
-
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
 }
 
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle
 {
-
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    if (!result)
+        return result;
+    
+    return result;
 }
 
-@property (assigned) BFSpline *spline;
+@synthesize spline = m_spline;
 
 @end

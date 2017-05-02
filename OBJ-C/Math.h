@@ -55,7 +55,8 @@ typedef struct
 
 @interface NSValue (BFPoint3D)
 
-+ (NSValue *) valueWithBFPoint3D: (BFPoint3D) value;
++ (NSValue *) valueWithBFPoint3D:(BFPoint3D) value;
++ (void) addMetaData:(NSString *) name Data:(id) data;
 
 @property (readonly) BFPoint3D BFPoint3D;
 
@@ -66,6 +67,19 @@ typedef struct
 + (NSValue *) valueWithBFPointUV: (BFPointUV) value;
 
 @property (readonly) BFPointUV BFPointUV;
+
+@end
+
+@interface BFCoordExchanger : NSObject
+{
+    float m_points[3]; // a, b, c
+}
+
+- (id) initWithPoints:(BFPointUV)a And:(BFPointUV)b;
+- (id) coordExchangerWithPoints :(BFPointUV)a And:(BFPointUV)b;
+
+- (float) vfromu:(float) u;
+- (float) ufromv:(float) v;
 
 @end
 
@@ -81,6 +95,13 @@ float absf(float value);
 - (GLKMatrix4) getModelMatrix;
 @end
 
+// Меш
+@protocol BFMesh
+- (int) getGLPrimitive;
+- (GLint *) getIndices;
+- (BFVertext *) getData;
+@end
+
 // Кривая
 @protocol BFCurve
 - (BFPoint3D) getPointAt:  (float) t;
@@ -93,34 +114,37 @@ float absf(float value);
 
 // Поверхность
 @protocol BFSurface
-- (BFPoint3D) getPointAt:         (BFPointUV)   point;
-- (BFPoint3D) getPointAt:         (BFPointUV)   point  OnSpline:     (int)   spline;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithSegments: (int)   count;                        // return BFPoint3D[]
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithMinAngle: (float) angle;                        // return BFPoint3D[]
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int)   count;                        // return BFPoint3D[]
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle;                        // return BFPoint3D[]
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithSegments: (int)   count OnSpline: (int) spline; // return BFPoint3D[]
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return BFPoint3D[]
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int)   count OnSpline: (int) spline; // return BFPoint3D[]
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return BFPoint3D[]
+- (BFPoint3D) getPointAt:         (BFPointUV) point;
+- (BFPoint3D) getPointAt:         (BFPointUV) point  OnSpline:     (int)   spline;
+- (NSArray *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count;                        // return BFPoint3D[]
+- (NSArray *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle;                        // return BFPoint3D[]
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count;                        // return BFPoint3D[]
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle;                        // return BFPoint3D[]
+- (NSArray *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count OnSpline: (int) spline; // return BFPoint3D[]
+- (NSArray *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return BFPoint3D[]
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count OnSpline: (int) spline; // return BFPoint3D[]
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle OnSpline: (int) spline; // return BFPoint3D[]
 @end
+
+typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 
 @interface BFSpline : NSObject
 {
-    BFPoint3D *m_points;
+    NSMutableArray *m_points;
     unsigned int m_order;
-    unsigned int m_count;
 }
 
-- (id) initWithPoints: (NSArray *) points Order: (unsigned int) order; // NSArray<BFPoint3D>
+- (id) initWithPoints: (NSArray *) points Order: (unsigned int) order; // NSArray<NSVAlue<BFPoint3D>>
 - (id) initWithPoints: (BFPoint3D *) points Count: (unsigned int) count Order: (unsigned int) order;
 - (void) dealloc;
 
 - (BFPoint3D) getPointAt:  (float) t;
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int)   count;
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int)   count WithBlock: (BFPerPointBlock) block;
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle WithBlock: (BFPerPointBlock) block;
 
-@property (assign) NSArray *points;
+@property (retain) NSMutableArray *points;
 
 @end
 
@@ -130,16 +154,18 @@ float absf(float value);
     unsigned int m_order;
 }
 
-- (id) initWithPoints: (NSArray *) splines Order: (unsigned int) order; // NSArray<BFSpline>
-- (id) initWithPoints: (BFPoint3D *) points CountU: (unsigned int) count_u CountV: (unsigned int) count_v
-                                            OrderU: (unsigned int) order_u OrderV: (unsigned int) order_v;
+- (id) initWithSplines: (NSArray *)   splines Order: (unsigned int) order; // NSArray<BFSpline>
+- (id) initWithPoints:  (BFPoint3D *) points CountU: (unsigned int) count_u CountV: (unsigned int) count_v
+                                             OrderU: (unsigned int) order_u OrderV: (unsigned int) order_v;
 - (void) dealloc;
 
-- (BFPoint3D) getPointAt:         (BFPointUV)   point;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithMinAngle: (float) angle;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle;
+- (BFPoint3D) getPointAt:         (BFPointUV) point;
+- (NSArray *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count;
+- (NSArray *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle;
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count;
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle;
+
+@property (retain) NSArray *splines;
 
 @end
 
@@ -152,12 +178,12 @@ float absf(float value);
 - (id) initWithPoints: (BFSpline *) spline Extrude: (unsigned int) extrude;
 - (void) dealloc;
 
-- (BFPoint3D) getPointAt:         (BFPointUV)   point;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getLineByPoints:    (BFPointUV *) points WithMinAngle: (float) angle;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithSegments: (int)   count;
-- (NSArray *) getSurfaceByPoints: (BFPointUV *) points WithMinAngle: (float) angle;
+- (BFPoint3D) getPointAt:         (BFPointUV) point;
+- (NSArray *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
+- (NSArray *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
+- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
 
-@property (assign) BFSpline *spline;
+@property (retain) BFSpline *spline;
 
 @end
