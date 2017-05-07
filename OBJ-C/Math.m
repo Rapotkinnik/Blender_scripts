@@ -1,6 +1,7 @@
 #import "Math.h"
 
 static const float MIN_DELTA_T = .000001f;
+static const float MACHINE_EPSILON = 2e-54;
 
 @implementation NSValue (BFPoint3D)
 
@@ -9,12 +10,31 @@ static const float MIN_DELTA_T = .000001f;
     return [self valueWithBytes:&value objCType:@encode(BFPoint3D)];
 }
 
++ (NSValue *) valueWithBFPoint3D:(BFPoint3D) value MetaData:(NSDictionary *)dict;
+{
+    NSValue *result = [self valueWithBytes:&value objCType:@encode(BFPoint3D)];
+    [[result MetaData] setValuesForKeysWithDictionary:dict];
+    
+    return result;
+}
+
+- (id) getMetaData:(NSString *)name
+{
+    return [[self MetaData] valueForKey:name];
+}
+- (void) addMetaData:(NSString *)name WithValue:(id) value
+{
+    [[self MetaData] setValue:value forKey:name];
+}
+
 - (BFPoint3D) BFPoint3D
 {
     BFPoint3D value;
     [self getValue: &value];
     return value;
 }
+
+@dynamic MetaData;
 
 @end
 
@@ -34,38 +54,95 @@ static const float MIN_DELTA_T = .000001f;
 
 @end
 
-@implementation BFCoordExchanger
+@implementation NSValue (BFVertext)
 
-- (id) initWithPoints:(BFPointUV)a And:(BFPointUV)b
++ (NSValue *) valueWithBFVertext: (BFVertext) value
+{
+    return [self valueWithBytes:&value objCType:@encode(BFVertext)];
+}
+
+- (BFVertext) BFVertext
+{
+    BFVertext value;
+    [self getValue: &value];
+    return value;
+}
+
+@end
+
+@implementation BFLine
+
+- (id) initWithPointsUV:(BFPointUV)a :(BFPointUV)b
 {
     self = [super init];
     if (self)
     {
-        m_points[0] = b.v - a.v;
-        m_points[1] = a.u - b.u;
-        m_points[2] = - a.u * m_points[0] - a.v * m_points[1];
+        m_points.pointsUV[0] = a;
+        m_points.pointsUV[1] = b;
+        m_a = b.v - a.v;
+        m_b = a.u - b.u;
+        m_c = - a.u * m_a - a.v * m_b;
     }
     
     return self;
 }
 
-- (id) coordExchangerWithPoints :(BFPointUV)a And:(BFPointUV)b
+- (id) initWithPoints2D:(BFPoint2D)a :(BFPoint2D)b
+{
+    self = [super init];
+    if (self)
+    {
+        m_points.points2D[0] = a;
+        m_points.points2D[1] = b;
+        m_a = b.y - a.y;
+        m_b = a.x - b.x;
+        m_c = - a.x * m_a - a.y * m_b;
+    }
+    
+    return self;
+}
+
+- (id) lineWithPointsUV:(BFPointUV)a :(BFPointUV)b
 {
 #ifdef OBJC_ARC_UNAVAILABLE
-//    return [[[BFCoordExchanger alloc] initWithPoints:a And:b] autorelease];
+    //    return [[[BFCoordExchanger alloc] initWithPoints:a And:b] autorelease];
 #endif
-    return [[BFCoordExchanger alloc] initWithPoints:a And:b];
+    return [[BFLine alloc] initWithPointsUV:a :b];
 }
 
-- (float) vfromu:(float) u
+- (id) lineWithPoints2D:(BFPoint2D)a :(BFPoint2D)b
 {
-    return - (m_points[2] + m_points[0] * u) / m_points[1];
+    return [[BFLine alloc] initWithPoints2D:a :b];
 }
 
-- (float) ufromv:(float) v
+- (float) leftTurnWithPoint2D:(BFPoint2D) point
 {
-    return - (m_points[2] + m_points[1] * v) / m_points[0];
+    return (m_points.points2D[1].y - m_points.points2D[0].y) * (point.x - m_points.points2D[0].x) -
+           (m_points.points2D[1].x - m_points.points2D[0].x) * (point.y - m_points.points2D[0].y);
 }
+
+- (float) leftTurnWithpointUV:(BFPointUV) point
+{
+    return (m_points.pointsUV[1].v - m_points.pointsUV[0].v) * (point.u - m_points.pointsUV[0].u) -
+           (m_points.pointsUV[1].u - m_points.pointsUV[0].u) * (point.v - m_points.pointsUV[0].v);
+}
+
+- (LineIntersection) isIntersectedBy:(BFLine *) line
+{
+    float first  = [self leftTurnWithPoint2D:line->m_points.points2D[0]];
+    float second = [self leftTurnWithPoint2D:line->m_points.points2D[1]];
+    
+    if (fabs(first) < MACHINE_EPSILON)
+        return TouchFirst;
+    if (fabs(second) < MACHINE_EPSILON)
+        return TouchSecond;
+    if (first * second < 0)
+        return Intersection;
+    
+    return UnIntersection;
+}
+
+@synthesize a = m_a, b = m_b, c = m_c;
 
 @end
 
@@ -111,6 +188,112 @@ BFPoint3D QuinticBezierCurve(const BFPoint3D points[6], float t)
     return result;
 }
 
+BOOL IsConvex(id curValue, id<NSFastEnumeration> *poly, BFGetPointUVFromValue block)
+{
+    BFPointUV point = block(curValue, NULL);
+    
+    /*    if ((cur == NULL) || (figure.getSize() <= 0))
+     return false;
+     
+     float a, b, c;
+     
+     QPointF *pointA = cur->getContent();
+     QPointF *pointB = cur->getNext()->getContent();
+     QPointF *pointC = cur->getPrev()->getContent();
+     QPointF *point = NULL;
+     
+     if (((pointB->x() - pointA->x())*(pointC->y() - pointA->y()) -
+     (pointB->y() - pointA->y())*(pointC->x() - pointA->x())) <= 0)
+     return false;
+     
+     figure.goBOList();
+     do
+     {
+     point = figure.getCur()->getContent();
+     if ((point != pointA) && (point != pointB) && (point != pointC))
+     {
+     a = (pointA->x() - point->x()) * (pointB->y() - pointA->y()) -
+     (pointB->x() - pointA->x()) * (pointA->y() - point->y());
+     b = (pointB->x() - point->x()) * (pointC->y() - pointB->y()) -
+     (pointC->x() - pointB->x()) * (pointB->y() - point->y());
+     c = (pointC->x() - point->x()) * (pointA->y() - pointC->y()) -
+     (pointA->x() - pointC->x()) * (pointC->y() - point->y());
+     if (((a < 0 && b < 0 && c < 0) || (a > 0 && b > 0 && c > 0)))
+     return false;
+     }
+     
+     figure.goNext();
+     
+     }while(!figure.isBOList());*/
+    
+    return YES;
+}
+
+NSArray *BFTriangulate(NSEnumerator *poly)
+{
+    return BFTriangulateWithGetPointFunc(poly, ^BFPointUV(id value, BOOL *isOK) {
+        *isOK = YES;
+        return [value BFPointUV];
+    });
+}
+
+NSArray *BFTriangulateWithGetPointFunc(NSEnumerator *poly, BFGetPointUVFromValue block)
+{
+    NSMutableArray *result = [NSMutableArray array];
+    if (!result)
+        return result;
+    
+    while ([poly count] > 3)
+    {
+        if (IsConvex(, , BLOCK))
+        {
+            
+        }
+    }
+    
+    /*
+    QList<QList<QPointF *> > triangles;
+    figure.goBOList();
+    //    float aX, aY, bX, bY;
+    int i = 0;
+    while((figure.getSize() > 3) && (i < figure.getSize()))
+    {
+        
+        //        aX = figure.getCur()->getContent()->x() - figure.getPrev()->getContent()->x();
+        //        aY = figure.getCur()->getContent()->y() - figure.getPrev()->getContent()->y();
+        //        bX = figure.getNext()->getContent()->x() - figure.getCur()->getContent()->x();
+        //        bY = figure.getNext()->getContent()->y() - figure.getCur()->getContent()->y();
+        
+        //        qDebug()<<(aX*bX + aX*bY)/sqrt((aX*aX + aY*aY)*(bX*bX + bY*bY));
+        
+        if (isEar(figure.getCur(), figure))
+        {
+            QList<QPointF *> list;
+            list.append(new QPointF(*figure.getPrev()->getContent()));
+            list.append(new QPointF(*figure.getCur()->getContent()));
+            list.append(new QPointF(*figure.getNext()->getContent()));
+            figure.removeCur();
+            //            figure.goPrev();
+            
+            i = 0;
+            triangles.append(list);
+            //            updateGL();
+        }
+        
+        i++;
+        figure.goNext();
+    }
+    
+    QList<QPointF *> list;
+    list.append(new QPointF(*figure.getPrev()->getContent()));
+    list.append(new QPointF(*figure.getCur()->getContent()));
+    list.append(new QPointF(*figure.getNext()->getContent()));
+    
+    triangles.append(list); */
+    
+    return result;
+}
+
 float absf(float value)
 {
     if (value >= 0)
@@ -118,6 +301,22 @@ float absf(float value)
     
     return -1 * value;
 }
+
+@interface BFCurveMesh : BFObject <BFMesh>
+
+@end
+
+@implementation BFCurveMesh
+
+@end
+
+@interface BFSurfaceMesh : BFObject <BFMesh>
+
+@end
+
+@implementation BFSurfaceMesh
+
+@end
 
 @implementation BFSpline
 
@@ -202,11 +401,10 @@ float absf(float value)
     float delta = (t_end - t_start) / point_count;
     for (int segment = 0; segment < point_count; segment++)
     {
-        BFPoint3D point = [self getPointAt: t_start + segment*delta];
-        if (block)
-            block(&point, t_start + segment*delta);
-        
-        [result addObject: [NSValue valueWithBFPoint3D: point]];
+        float t = t_start + segment*delta;
+        BFPoint3D point = [self getPointAt: t];
+        [result addObject: [NSValue valueWithBFPoint3D: point
+                                              MetaData: @{@"t": [NSNumber numberWithFloat:t]}]];
     }
     
     return result;
@@ -350,7 +548,12 @@ float absf(float value)
 
 @implementation BFExtrudedSpline
 
-- (id) initWithPoints: (BFSpline *) spline Extrude: (unsigned int) extrude
+- (id) initWithPoints:(BFSpline *) spline Extrude:(unsigned int) extrude
+{
+    return [self initWithSpline:spline Extrude:extrude Matrix:GLKMatrix4Identity];
+}
+
+- (id) initWithSplines: (BFSpline *) spline Extrude: (unsigned int) extrude WithMatrix:(GLKMatrix4) matrix
 {
     self = [super init];
     if (self)
@@ -358,7 +561,7 @@ float absf(float value)
         [self setSpline:spline];
         m_extrude = extrude;
     }
-
+    
     return self;
 }
 
@@ -367,15 +570,19 @@ float absf(float value)
     [self setSpline:NULL];
 }
 
-- (BFPoint3D) getPointAt: (BFPointUV) point;
+- (BFVertext) getPointAt: (BFPointUV) point;
 {
-    BFPoint3D result = [m_spline getPointAt: point.u];
-    result.z += (point.v - 0.5) * m_extrude;
+    BFPoint3D point3D = [m_spline getPointAt: point.u];
+    point3D.z += (point.v - 0.5) * m_extrude;
+    
+    BFVertext result;
+    result.coord = point3D;
+    result.textureCoord = point;
 
     return result;
 }
 
-- (NSArray *) getLineByPoints: (NSArray *) points WithSegments: (int) count
+- (id<BFMesh>) getLineByPoints: (NSArray *) points WithSegments: (int) count
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
@@ -386,17 +593,28 @@ float absf(float value)
         BFCoordExchanger *exchenger = [[BFCoordExchanger alloc] initWithPoints:[points[i] BFPointUV]
                                                                            And:[points[i + 1] BFPointUV]];
         
-        [result addObjectsFromArray: [m_spline getLineFrom:[points[i] BFPointUV].u
-                                                        To:[points[i + 1] BFPointUV].u
-                                              WithSegments:count WithBlock:^(BFPoint3D *point, float t) {
-                                                  point->z += ([exchenger vfromu:t] - 0.5) * m_extrude;
-                                              }]];
+        NSMutableArray *segment_result =  [NSMutableArray arrayWithArray: [m_spline getLineFrom:[points[i] BFPointUV].u
+                                                                                             To:[points[i + 1] BFPointUV].u
+                                                                                   WithSegments:count WithBlock:^(BFPoint3D *point, float t) {
+                                                                                        point->z += ([exchenger vfromu:t] - 0.5) * m_extrude;
+                                                                                   }]];
+        
+        for (int i = 0; i < [segment_result count]; i++)
+        {
+            NSValue *value = [segment_result objectAtIndex:i];
+            BFPoint3D point = [value BFPoint3D];
+            point.z += ([exchenger vfromu:[[value getMetaData:@"t"] floatValue]] - 0.5) * m_extrude;
+            [segment_result replaceObjectAtIndex:i withObject:[NSValue valueWithBFPoint3D:point]];
+        }
+        
+        [result addObjectsFromArray: segment_result];
+        
     }
 
     return result;
 }
 
-- (NSArray *) getLineByPoints: (NSArray *) points WithMinAngle: (float) angle
+- (id<BFMesh>) getLineByPoints: (NSArray *) points WithMinAngle: (float) angle
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
@@ -405,22 +623,38 @@ float absf(float value)
     return result;
 }
 
-- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int) count
+- (id<BFMesh>) getSurfaceByPoints: (NSArray *) points WithSegments: (int) count
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
+    
+    NSArray *outlinePoints = [self getLineByPoints:points WithSegments:count];
+    NSArray *outlineIndices = BFTriangulate([outlinePoints objectEnumerator]);
+    
+    for (int i = 0; i < [outlineIndices count]; i = i+3)
+    {
+        
+    }
+    for (NSNumber *index in outlineIndices)
     
     return result;
 }
 
-- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle
+- (id<BFMesh>) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
     
+    NSArray *segment =
+    
     return result;
+}
+
+- (GLKMatrix4) getModelMatrix
+{
+    return m_matrix;
 }
 
 @synthesize spline = m_spline;

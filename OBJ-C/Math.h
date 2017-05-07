@@ -56,9 +56,13 @@ typedef struct
 @interface NSValue (BFPoint3D)
 
 + (NSValue *) valueWithBFPoint3D:(BFPoint3D) value;
-+ (void) addMetaData:(NSString *) name Data:(id) data;
++ (NSValue *) valueWithBFPoint3D:(BFPoint3D) value MetaData:(NSDictionary *)dict;
+
+- (id) getMetaData:(NSString *)name;
+- (void) addMetaData:(NSString *)name WithValue:(id) value;
 
 @property (readonly) BFPoint3D BFPoint3D;
+@property (readonly) NSMutableDictionary *MetaData;
 
 @end
 
@@ -70,16 +74,50 @@ typedef struct
 
 @end
 
-@interface BFCoordExchanger : NSObject
+@interface NSValue (BFVertext)
+
++ (NSValue *) valueWithBFVertext: (BFVertext) value;
+
+@property (readonly) BFVertext BFVertext;
+
+@end
+
+typedef enum
 {
-    float m_points[3]; // a, b, c
+    TouchFirst,
+    TouchSecond,
+    Intersection,
+    UnIntersection
+} LineIntersection;
+
+@interface BFLine: NSObject
+{
+    float m_a, m_b, m_c;
+    union {
+        BFPointUV pointsUV[2];
+        BFPoint2D points2D[2];
+    } m_points;
 }
 
-- (id) initWithPoints:(BFPointUV)a And:(BFPointUV)b;
-- (id) coordExchangerWithPoints :(BFPointUV)a And:(BFPointUV)b;
+- (id) initWithPointsUV:(BFPointUV)a :(BFPointUV)b;
+- (id) initWithPoints2D:(BFPoint2D)a :(BFPoint2D)b;
+- (id) lineWithPointsUV:(BFPointUV)a :(BFPointUV)b;
+- (id) lineWithPoints2D:(BFPoint2D)a :(BFPoint2D)b;
 
-- (float) vfromu:(float) u;
-- (float) ufromv:(float) v;
+- (float) leftTurnWithPoint2D:(BFPoint2D) point;
+- (float) leftTurnWithpointUV:(BFPointUV) point;
+- (LineIntersection) isIntersectedBy:(BFLine *) line;
+- (BFPointUV) getIntersectionPointUVWith:(BFLine *) line;
+- (BFPoint2D) getIntersectionPoint2DWith:(BFLine *) line;
+
+- (float) vFromU:(float) u;
+- (float) uFromV:(float) v;
+- (float) yFromX:(float) x;
+- (float) xFromY:(float) y;
+
+@property (readonly) float a;
+@property (readonly) float b;
+@property (readonly) float c;
 
 @end
 
@@ -89,6 +127,12 @@ BFPoint3D CubicBezierCurve(const BFPoint3D points[4], float t);
 BFPoint3D QuadricBezierCurve(const BFPoint3D points[5], float t);
 BFPoint3D QuinticBezierCurve(const BFPoint3D points[6], float t);
 
+typedef BFPointUV(^BFGetPointUVFromValue)(id value, BOOL *isOK);
+//typedef BOOL(^BFGetPointUVFromValue)(id value, BFPointUV *point);
+
+NSArray *BFTriangulate(NSEnumerator *poly); // return NSArray<NSNumber>
+NSArray *BFTriangulateWithGetPointFunc(NSEnumerator *poly, BFGetPointUVFromValue block);
+
 float absf(float value);
 
 @interface BFObject: NSObject
@@ -97,7 +141,7 @@ float absf(float value);
 
 // Меш
 @protocol BFMesh
-- (int) getGLPrimitive;
+- (GLint) getGLPrimitive;
 - (GLint *) getIndices;
 - (BFVertext *) getData;
 @end
@@ -169,20 +213,22 @@ typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 
 @end
 
-@interface BFExtrudedSpline : NSObject
+@interface BFExtrudedSpline : BFObject
 {
     BFSpline *m_spline;
+    GLKMatrix4 m_matrix;
     unsigned int m_extrude;
 }
 
-- (id) initWithPoints: (BFSpline *) spline Extrude: (unsigned int) extrude;
+- (id) initWithSpline:(BFSpline *) spline Extrude:(unsigned int) extrude;
+- (id) initWithSpline:(BFSpline *) spline Extrude:(unsigned int) extrude Matrix:(GLKMatrix4) matrix;
 - (void) dealloc;
 
-- (BFPoint3D) getPointAt:         (BFPointUV) point;
-- (NSArray *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
-- (NSArray *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
-- (NSArray *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
-- (NSArray *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
+- (BFVertext)          getPointAt:         (BFPointUV) point;
+- (BFObject<BFMesh> *) getLineByPoints:    (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
+- (BFObject<BFMesh> *) getLineByPoints:    (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
+- (BFObject<BFMesh> *) getSurfaceByPoints: (NSArray *) points WithSegments: (int)   count; // NSArray<NSValue<BFPointUV>>
+- (BFObject<BFMesh> *) getSurfaceByPoints: (NSArray *) points WithMinAngle: (float) angle; // NSArray<NSValue<BFPointUV>>
 
 @property (retain) BFSpline *spline;
 
