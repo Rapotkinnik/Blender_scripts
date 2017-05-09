@@ -142,6 +142,49 @@ static const float MACHINE_EPSILON = 2e-54;
     return UnIntersection;
 }
 
+- (BFPointUV) getIntersectionPointUVWith:(BFLine *) line
+{
+    BFPointUV result;
+    
+    return result;
+}
+
+- (BFPoint2D) getIntersectionPoint2DWith:(BFLine *) line
+{
+    BFPoint2D result;
+    
+    return result;
+}
+
+- (float) vFromU:(float) u
+{
+    if (m_b)
+        return - (m_c + m_a * u) / m_b;
+    
+    return 0.0;
+}
+- (float) uFromV:(float) v
+{
+    if (m_a)
+        return - (m_c + m_b * v) / m_a;
+    
+    return 0.0;
+}
+- (float) yFromX:(float) x
+{
+    if (m_b)
+        return - (m_c + m_a * x) / m_b;
+
+    return 0.0;
+}
+- (float) xFromY:(float) y
+{
+    if (m_a)
+        return - (m_c + m_b * y) / m_a;
+    
+    return 0.0;
+}
+
 @synthesize a = m_a, b = m_b, c = m_c;
 
 @end
@@ -302,19 +345,67 @@ float absf(float value)
     return -1 * value;
 }
 
-@interface BFCurveMesh : BFObject <BFMesh>
+//@interface BFCurveMesh : BFObject <BFMesh>
+//
+//@end
+//
+//@implementation BFCurveMesh
+//
+//- (GLuint)getGLPrimitive
+//{
+//    return GL_LINE_STRIP;
+//}
+//
+//@end
+
+@interface BFDefaultMesh : BFObject <BFMesh>
+
+-(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
+
+@property (readonly, getter = getData) BFVertext * m_data;
+@property (readonly, getter = getIndices) GLuint * m_indices;
+@property (readonly, getter = getDataCount) GLuint m_dataCount;
+@property (readonly, getter = getIndicesCount) GLuint m_indicesCount;
+@property (readonly, getter = getGLPrimitive) GLuint m_primitive;
+@property (readonly, getter = getModelMatrix) GLKMatrix4 m_modelMatrix;
 
 @end
 
-@implementation BFCurveMesh
+@implementation BFDefaultMesh
 
-@end
+-(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix
+{
+    self = [super init];
+    if (self)
+    {
+        m_dataCount = [data count];
+        m_indicesCount = [indices count];
+        m_data = (BFVertext *)malloc(m_dataCount * sizeof(BFVertext));
+        m_indices = (GLuint *)malloc(m_indicesCount * sizeof(GLuint));
+        
+        for (int i = 0; i < m_dataCount; i++)
+            m_data[i] = [[data objectAtIndex:i] BFVertext];
+        
+        for (int i = 0; i < m_indicesCount; i++)
+            m_indices[i] = [[indices objectAtIndex:i] intValue];
+        
+        m_primitive = primitive;
+        m_modelMatrix = matrix;
+    }
+    
+    return self;
+}
 
-@interface BFSurfaceMesh : BFObject <BFMesh>
+-(void)dealloc
+{
+    if (m_data)
+        free(m_data);
+    
+    if (m_indices)
+        free(m_indices);
+}
 
-@end
-
-@implementation BFSurfaceMesh
+@synthesize m_data, m_indices, m_dataCount, m_indicesCount, m_primitive, m_modelMatrix;
 
 @end
 
@@ -550,11 +641,6 @@ float absf(float value)
 
 - (id) initWithPoints:(BFSpline *) spline Extrude:(unsigned int) extrude
 {
-    return [self initWithSpline:spline Extrude:extrude Matrix:GLKMatrix4Identity];
-}
-
-- (id) initWithSplines: (BFSpline *) spline Extrude: (unsigned int) extrude WithMatrix:(GLKMatrix4) matrix
-{
     self = [super init];
     if (self)
     {
@@ -652,9 +738,35 @@ float absf(float value)
     return result;
 }
 
-- (GLKMatrix4) getModelMatrix
+- (BFObject<BFMesh> *) getWholeSurface
 {
-    return m_matrix;
+    NSMutableArray *result = [NSMutableArray array];
+    NSArray *splinePoints = [m_spline getLineFrom:0.0 To:1.0 WithMinAngle:150 * M_PI_2/180];
+    
+    for (NSValue *point in splinePoints)
+    {
+        BFPoint3D point3D = [point BFPoint3D];
+        
+        BFVertext farPoint, nearPoint;
+        farPoint.coord = nearPoint.coord = point3D;
+        farPoint.coord.z -= 0.5 * m_extrude;
+        nearPoint.coord.z += 0.5 * m_extrude;
+        
+        farPoint.textureCoord = {0.0, 1.0};
+        nearPoint.textureCoord = {0.0, 0.0};
+        
+        
+        point3D.z += (point.v - 0.5) * m_extrude;
+        
+        NSNumber
+        
+        BFVertext result;
+        result.coord = point3D;
+        result.textureCoord = point;
+        
+        [result addObject:[NSValue valueWithBFVertext:nearPoint]];
+        [result addObject:[NSValue valueWithBFVertext:farPoint]];
+    }
 }
 
 @synthesize spline = m_spline;
