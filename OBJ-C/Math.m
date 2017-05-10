@@ -189,6 +189,20 @@ static const float MACHINE_EPSILON = 2e-54;
 
 @end
 
+BFPoint3D MakeNormal(BFPoint3D *point)
+{
+    BFPoint3D result;
+    float length = sqrt(pow(point->x, 2) + pow(point->y, 2) + pow(point->z, 2));
+
+    result.x = -point->y / length;
+    result.y =  point->x / length;
+    result.z =  point->z / length;
+
+    return result;
+
+    return {-point->y / length, point->x / length, point->z / length};
+}
+
 BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t)
 {
     BFPoint3D result;
@@ -201,9 +215,9 @@ BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t)
 BFPoint3D QuadraticBezierCurve(const BFPoint3D points[3], float t)
 {
     BFPoint3D result;
-    result.x = pow(1 - t, 2) * points[0].x + 2 * t * (1 - t) * points[1].x + 2 * t * t * points[2].x;
-    result.y = pow(1 - t, 2) * points[0].y + 2 * t * (1 - t) * points[1].y + 2 * t * t * points[2].y;
-    result.z = pow(1 - t, 2) * points[0].z + 2 * t * (1 - t) * points[1].z + 2 * t * t * points[2].z;
+    result.x = pow(1 - t, 2) * points[0].x + 2 * t * (1 - t) * points[1].x + t * t * points[2].x;
+    result.y = pow(1 - t, 2) * points[0].y + 2 * t * (1 - t) * points[1].y + t * t * points[2].y;
+    result.z = pow(1 - t, 2) * points[0].z + 2 * t * (1 - t) * points[1].z + t * t * points[2].z;
     return result;
 };
 
@@ -226,6 +240,54 @@ BFPoint3D QuadricBezierCurve(const BFPoint3D points[5], float t)
 };
 
 BFPoint3D QuinticBezierCurve(const BFPoint3D points[6], float t)
+{
+    BFPoint3D result;
+    return result;
+}
+
+BFPoint3D NormalToLinearBezierCurve(const BFPoint3D points[2], float t)
+{
+    BFPoint3D result;
+    // Касательная к кривой в точке t
+    result.x = points[1].x - points[0].x;
+    result.y = points[1].y - points[0].y;
+    result.z = points[1].z - points[0].z;
+
+    // Преобразуем касательную в нормализованную нормаль к кривой в точке t
+    return MakeNormal(&result);
+}
+
+BFPoint3D NormalToQuadraticBezierCurve(const BFPoint3D points[3], float t);
+{
+    BFPoint3D result;
+    result.x = 2 * (1 - t) * (points[1].x - points[0].x) + 2 * t * (points[2].x - points[1].x);
+    result.y = 2 * (1 - t) * (points[1].y - points[0].y) + 2 * t * (points[2].y - points[1].y);
+    result.z = 2 * (1 - t) * (points[1].z - points[0].z) + 2 * t * (points[2].z - points[1].z);
+
+    return MakeNormal(&result);
+}
+
+BFPoint3D NormalToCubicBezierCurve(const BFPoint3D points[4], float t)
+{
+    BFPoint3D result;
+    result.x = 3 * pow((1 - t), 2) * (points[1].x - points[0].x) + 6 * (1 - t) * t * (points[2].x - points[1].x) + 3 * pow(t, 2) * (points[3].x - points[2].x);
+    result.y = 3 * pow((1 - t), 2) * (points[1].y - points[0].y) + 6 * (1 - t) * t * (points[2].y - points[1].y) + 3 * pow(t, 2) * (points[3].y - points[2].y);
+    result.z = 3 * pow((1 - t), 2) * (points[1].z - points[0].z) + 6 * (1 - t) * t * (points[2].z - points[1].z) + 3 * pow(t, 2) * (points[3].z - points[2].z);
+
+    return MakeNormal(&result);
+}
+
+BFPoint3D NormalToQuadricBezierCurve(const BFPoint3D points[5], float t);
+{
+    BFPoint3D result;
+    result.x = 4 * pow((1 - t), 3) * (points[1].x - points[0].x) + 12 * pow((1 - t), 2) * t * (points[2].x - points[1].x) + 12 * (1 - t) * pow(t, 2) * (points[3].x - points[2].x) + 4 * pow(t, 3) * (points[4].x - points[3].x);
+    result.y = 4 * pow((1 - t), 3) * (points[1].y - points[0].y) + 12 * pow((1 - t), 2) * t * (points[2].y - points[1].y) + 12 * (1 - t) * pow(t, 2) * (points[3].y - points[2].y) + 4 * pow(t, 3) * (points[4].y - points[3].y);
+    result.z = 4 * pow((1 - t), 3) * (points[1].z - points[0].z) + 12 * pow((1 - t), 2) * t * (points[2].z - points[1].z) + 12 * (1 - t) * pow(t, 2) * (points[3].z - points[2].z) + 4 * pow(t, 3) * (points[4].z - points[3].z);
+
+    return MakeNormal(&result);
+}
+
+BFPoint3D NormalToQuinticBezierCurve(const BFPoint3D points[6], float t)
 {
     BFPoint3D result;
     return result;

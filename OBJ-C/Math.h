@@ -121,11 +121,19 @@ typedef enum
 
 @end
 
+BFPoint3D MakeNormal(BFPoint3D *point);
+
 BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t);
 BFPoint3D QuadraticBezierCurve(const BFPoint3D points[3], float t);
 BFPoint3D CubicBezierCurve(const BFPoint3D points[4], float t);
 BFPoint3D QuadricBezierCurve(const BFPoint3D points[5], float t);
 BFPoint3D QuinticBezierCurve(const BFPoint3D points[6], float t);
+
+BFPoint3D NormalToLinearBezierCurve(const BFPoint3D points[2], float t);
+BFPoint3D NormalToQuadraticBezierCurve(const BFPoint3D points[3], float t);
+BFPoint3D NormalToCubicBezierCurve(const BFPoint3D points[4], float t);
+BFPoint3D NormalToQuadricBezierCurve(const BFPoint3D points[5], float t);
+BFPoint3D NormalToQuinticBezierCurve(const BFPoint3D points[6], float t);
 
 typedef BFPointUV(^BFGetPointUVFromValue)(id value, BOOL *isOK);
 //typedef BOOL(^BFGetPointUVFromValue)(id value, BFPointUV *point);
