@@ -327,9 +327,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 if self.prop_export_curve_as_function and obj.type == 'CURVE':
                     with open(os.path.join(dir_path, '%s.h' % obj.name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
                         object_file.write('#import "Math.h"\n\n')
-                        self.export_curve(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
-                        shutil.copyfile('./Obj-C/Math.h', os.path.join(dir_path, 'Math.h'))
-                        shutil.copyfile('./Obj-C/Math.cpp', os.path.join(dir_path, 'Math.cpp'))
+                        if obj.data.extrude > 0:
+                            self.export_surface(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
+                        else:
+                            self.export_curve(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
+                        #shutil.copyfile('Obj-C/Math.h', os.path.join(dir_path, 'Math.h'))
+                        #shutil.copyfile('Obj-C/Math.cpp', os.path.join(dir_path, 'Math.cpp'))
 
                         continue
                 else:
@@ -554,7 +557,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         if self.prop_use_vertex_indices:
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
-            # так же необходимо экспортировать и список индексав этих вершин
+            # также необходимо экспортировать и список индексов этих вершин
             file.write('const GLuint %s_VERTEX_COUNT = %d;\n' % (mesh_name, len(mesh.vertices)))
             file.write('const Vertex %s_VERTICES[%s_VERTEX_COUNT] = {\n' % (mesh_name, mesh_name))
 
@@ -680,9 +683,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         # Здесь методы, реализующие анимацию объекта
         file.write('@end\n\n')
 
-        file.write('@implementation BF%s\n' % kwargs['name'])
-        file.write('- (id) init\n{\n'
-                   '\tself = [[super alloc] init];\n'
+        file.write('@implementation BF%s\n\n' % kwargs['name'])
+        file.write('-(id)init\n{\n'
+                   '\tself = [super init];\n'
                    '\tif (self)\n\t{\n')
 
         point_count_array = []
@@ -773,8 +776,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     bezier_points = bezier_points[1:-3]
 
             result_str = ''
-            point_count_array.append(len(bezier_points));
-            for i in range(len(bezier_points), step=2):
+            point_count_array.append(len(bezier_points))
+            for i in range(0, len(bezier_points) - 1, 2):
                 result_str += '\t\t\t' + '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[i])) \
                                        + '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[i + 1])) + '\n'
             else:
@@ -782,8 +785,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             file.write('\t\tBFPoint3D points_%d[] = {\n%s\n\t\t};\n\n' % (index, result_str))
 
-        for index, _ in enumerate(curve.splines):
-            file.write('\t\t[m_splines addObject: [[BFSpline aloc] initWithPoints: points_%d Count: %d Order: %d];\n' %
+        for index, spline in enumerate(curve.splines):
+            file.write('\t\t[m_splines addObject: [[BFSpline alloc] initWithPoints: points_%d Count: %d Order: %d];\n' %
                        (index, point_count_array[index], 4 if spline.type == 'BEZIER' else spline.order_u))
 
         matrix  = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
@@ -808,7 +811,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('@end')
 
 
-'''
+    '''
         return_type = 'CGPoint' if curve.dimensions == '2D' else 'CGPoint3D'
         for spline in curve.splines:
             file.write('%s %s(float t)\n{' % (return_type, kwargs['name']))
@@ -892,9 +895,161 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     file.write('\t};\n')
             file.write('\treturn CGPointMake(0.0, 0.0);\n};\n\n')
         print(kwargs)
-'''
+    '''
 
+    @staticmethod
+    def export_surface(surface, file, **kwargs):
+        file.write('@interface BF%s: BFObject <BFSurface>\n{\n' % kwargs['name'])
+        file.write('\tNSMutableArray *m_splines;\n')
+        file.write('\tGLKMatrix4 m_objectMatrix;\n')
+        file.write('}\n\n')
+        # Здесь методы, реализующие анимацию объекта
+        file.write('@end\n\n')
 
+        file.write('@implementation BF%s\n\n' % kwargs['name'])
+        file.write('-(id)init\n{\n'
+                   '\tself = [super init];\n'
+                   '\tif (self)\n\t{\n'
+                   '\t\tm_splines = [NSMutableArray array];\n\n')
+
+        point_count_array = []
+        for index, spline in enumerate(surface.splines):
+            bezier_points = []
+            if spline.type == 'BEZIER':
+                points = list(spline.bezier_points)
+                if spline.use_cyclic_u:
+                    points.append(spline.bezier_points[0])
+
+                for i in range(len(points) - 1):
+                    bezier_points.append(points[i].co)
+                    bezier_points.append(points[i].handle_right)
+                    bezier_points.append(points[i + 1].handle_left)
+                else:
+                    bezier_points.append(points[i].co)
+
+            # https://www.codeproject.com/Articles/996281/NURBS-curve-made-easy
+            if spline.type == 'NURBS':
+                points = list(spline.points)
+                if spline.use_cyclic_u:
+                    points.append(spline.points[0])
+
+                if spline.order_u == 2:
+                    bezier_points.extend(points)
+                    break
+
+                knots = [0]
+                for i, point in enumerate(points):
+                    knots.append(knots[i] + point.weight)
+
+                if spline.order_u == 3:
+                    for i in range(len(points) - spline.order_u + 1):
+                        v = ((knots[i + 3] - knots[i + 2]) * points[i].co[:] +
+                             (knots[i + 2] - knots[i + 1]) * points[i + 1].co[:]) / (knots[i + 3] - knots[i + 1])
+
+                        bezier_points.append(v)
+                        bezier_points.append(points[i + 1].co)
+
+                if spline.order_u == 4:
+                    c = ((knots[5] - knots[4]) * points[0].co[:] +
+                         (knots[4] - knots[2]) * points[1].co[:]) / (knots[5] - knots[2])
+
+                    bezier_points.append(c)
+
+                    for i in range(len(points) - spline.order_u + 1):
+                        b = ((knots[i + 5] - knots[i + 3]) * points[i + 1].co[:] +
+                             (knots[i + 3] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 5] - knots[i + 2])
+                        c = ((knots[i + 5] - knots[i + 4]) * points[i + 1].co[:] +
+                             (knots[i + 4] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 5] - knots[i + 2])
+                        v = ((knots[i + 4] - knots[i + 3]) * bezier_points[-1][:] +
+                             (knots[i + 3] - knots[i + 2]) * b[:]) / (knots[i + 4] - knots[i + 2])
+
+                        bezier_points.append(v)
+                        bezier_points.append(b)
+                        bezier_points.append(c)
+
+                    bezier_points = bezier_points[
+                                    1:-2]  # Или придется делать цикл на 1 итерацию меньше и добавять в конце vL
+
+                if spline.order_u == 5:
+                    d = ((knots[6] - knots[5]) * ((knots[6] - knots[5]) * points[0].co[:] +
+                                                  (knots[5] - knots[2]) * points[1].co[:]) / (knots[6] - knots[2]) +
+                         (knots[5] - knots[3]) * ((knots[7] - knots[5]) * points[1].co[:] +
+                                                  (knots[5] - knots[3]) * points[2].co[:]) / (knots[7] - knots[3])) / (knots[6] - knots[3])
+                    bezier_points.append(d)
+
+                    for i in range(len(points) - spline.order_u + 1):
+                        b = ((knots[i + 6] - knots[i + 4]) * ((knots[i + 6] - knots[i + 4]) * points[i + 1].co[:] +
+                                                              (knots[i + 6] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
+                             (knots[i + 4] - knots[i + 3]) * ((knots[i + 7] - knots[i + 4]) * points[i + 2].co[:] +
+                                                              (knots[i + 4] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3])) / (knots[i + 6] - knots[i + 3])
+                        c = ((knots[i + 6] - knots[i + 5]) * ((knots[i + 6] - knots[i + 4]) * points[i + 1].co[:] +
+                                                              (knots[i + 6] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
+                             (knots[i + 4] - knots[i + 3]) * ((knots[i + 7] - knots[i + 5]) * points[i + 2].co[:] +
+                                                              (knots[i + 5] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3]) +
+                             (knots[i + 5] - knots[i + 4]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 3])
+                        d = ((knots[i + 6] - knots[i + 5]) * ((knots[i + 6] - knots[i + 5]) * points[i + 1].co[:] +
+                                                              (knots[i + 5] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
+                             (knots[i + 5] - knots[i + 3]) * ((knots[i + 7] - knots[i + 5]) * points[i + 2].co[:] +
+                                                              (knots[i + 5] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3])) / (knots[i + 6] - knots[i + 3])
+                        v = ((knots[i + 5] - knots[i + 4]) * bezier_points[-1][:] +
+                             (knots[i + 4] - knots[i + 3]) * b[:]) / (knots[i + 4] - knots[i + 2])
+
+                        bezier_points.append(v)
+                        bezier_points.append(b)
+                        bezier_points.append(c)
+                        bezier_points.append(d)
+
+                    bezier_points = bezier_points[1:-3]
+
+            result_str = ''
+            point_count_array.append(len(bezier_points))
+            for i in range(len(bezier_points)):
+                result_str += '\t\t\t' if i % 2 == 0 else ''
+                result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[i]))
+                result_str += '\n' if i % 2 > 0 else ''
+            else:
+                result_str = result_str[:-2 if i % 2 == 0 else -3]
+
+            file.write('\t\tBFPoint3D points_%d[] = {\n%s\n\t\t};\n\n' % (index, result_str))
+
+        for index, spline in enumerate(surface.splines):
+            if spline.type == 'BEZIER':
+                file.write('\t\t[m_splines addObject: [[BFExtrudedSpline alloc] initWithSpline:\n'
+                           '\t\t                              [[BFSpline alloc] initWithPoints: points_%d Count:%d Order:%d] Extrude:%d]];\n' %
+                           (index, point_count_array[index], 4, surface.extrude))
+
+        matrix = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][2])) + ',\n\t\t' + ' ' * 33
+        matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][3]))
+
+        file.write('\n\t\t m_objectMatrix = GLKMatrix4Make(%s);\n\t}\n\n\treturn self;\n}\n\n' % matrix)
+        file.write('-(GLKMatrix4)getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n\n')
+        file.write('-(BFVertex)getPointAt:(BFPointUV)point\n{\n\treturn [self getPointAt:point OnSpline:0];\n}\n\n')
+        file.write('-(BFVertex)getPointAt:(BFPointUV)point OnSpline:(int)spline\n'
+                   '{\n\treturn [(BFExtrudedSpline *)m_splines[spline] getPointAt:point];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithSegments:(int)count\n'
+                   '{\n\treturn [self getLineByPoints:points WithSegments:(int)count OnSpline:0];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithMinAngle:(float)angle\n'
+                   '{\n\treturn [self getLineByPoints:points WithMinAngle:angle OnSpline:0];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithSegments:(int)count\n'
+                   '{\n\treturn [self getSurfaceByPoints:points WithSegments:count OnSpline:0];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithMinAngle:(float)angle\n'
+                   '{\n\treturn [self getSurfaceByPoints:points WithMinAngle:angle OnSpline:0];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
+                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithSegments:count];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINES Matrix:m_objectMatrix];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
+                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithMinAngle:angle];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINES Matrix:m_objectMatrix];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
+                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithSegments:count];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')
+        file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
+                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithMinAngle:angle];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')
+
+        file.write('@end')
 
 
 

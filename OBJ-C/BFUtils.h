@@ -24,6 +24,8 @@
 
 @end //BFListElem
 
+@class BFCircularList;
+
 typedef enum
 {
     Forward = 0,
@@ -32,7 +34,7 @@ typedef enum
 
 @interface BFCircularListEnumerator : NSEnumerator
 {
-@private SNFCircularList *m_list;
+@private BFCircularList *m_list;
 @private BOOL m_isEnumerationAtFirstElem;
 }
 

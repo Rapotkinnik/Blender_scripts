@@ -158,10 +158,8 @@ typedef BFPointUV(^BFGetPointUVFromValue)(id value, BOOL *isOK);
 NSArray *BFTriangulate(NSEnumerator *poly); // return NSArray<NSNumber>
 NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue block);
 
-float absf(float value);
-
 @interface BFObject: NSObject
-- (GLKMatrix4) getModelMatrix;
+-(GLKMatrix4)getModelMatrix;
 @end
 
 // Меш
@@ -196,7 +194,8 @@ float absf(float value);
 - (BFObject<BFMesh> *) getSurfaceByPoints: (NSArray *)points WithSegments:(int)  count OnSpline:(int)spline;
 - (BFObject<BFMesh> *) getSurfaceByPoints: (NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline;
 
-- (BFObject<BFMesh> *) getWholeSurface;
+- (BFObject<BFMesh> *) getWholeSurfaceWithSegments:(int)count;
+- (BFObject<BFMesh> *) getWholeSurfaceWithMinAngle:(float)angle;
 
 - (id<BFSurface>) getSurfaceWithGetPointUVFunc: (BFGetPointUVFromValue) block;
 @end
@@ -216,8 +215,6 @@ typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 - (BFPoint3D) getNormalAt:(float)t;
 - (NSArray *) getLineFrom:(float)t_start To:(float)t_end WithSegments:(int)   count;
 - (NSArray *) getLineFrom:(float)t_start To:(float)t_end WithMinAngle:(float) angle;
-- (NSArray *) getLineFrom:(float)t_start To:(float)t_end WithSegments:(int)   count WithBlock:(BFPerPointBlock)block;
-- (NSArray *) getLineFrom:(float)t_start To:(float)t_end WithMinAngle:(float) angle WithBlock:(BFPerPointBlock)block;
 
 @property (retain) NSMutableArray *points;
 
@@ -261,5 +258,19 @@ typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 - (NSArray *) getWholeSurface:(NSMutableArray *)indices WithMinAngle:(float)angle;
 
 @property (retain) BFSpline *spline;
+
+@end
+
+@interface BFDefaultMesh : BFObject <BFMesh>
+
+-(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
+-(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
+
+@property (readonly, getter = getData) BFVertex * m_data;
+@property (readonly, getter = getIndices) GLuint * m_indices;
+@property (readonly, getter = getDataCount) GLuint m_dataCount;
+@property (readonly, getter = getIndicesCount) GLuint m_indicesCount;
+@property (readonly, getter = getGLPrimitive) GLuint m_primitive;
+@property (readonly, getter = getModelMatrix) GLKMatrix4 m_modelMatrix;
 
 @end

@@ -460,7 +460,6 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     if (!result)
         return result;
     
-    /*
     QList<QList<QPointF *> > triangles;
     figure.goBOList();
     //    float aX, aY, bX, bY;
@@ -504,14 +503,6 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 }
 */
 
-float absf(float value)
-{
-    if (value >= 0)
-        return value;
-    
-    return -1 * value;
-}
-
 @implementation BFObject
 - (GLKMatrix4) getModelMatrix
 {
@@ -532,84 +523,6 @@ float absf(float value)
 //
 //@end
 
-@interface BFDefaultMesh : BFObject <BFMesh>
-
--(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
--(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
-
-@property (readonly, getter = getData) BFVertex * m_data;
-@property (readonly, getter = getIndices) GLuint * m_indices;
-@property (readonly, getter = getDataCount) GLuint m_dataCount;
-@property (readonly, getter = getIndicesCount) GLuint m_indicesCount;
-@property (readonly, getter = getGLPrimitive) GLuint m_primitive;
-@property (readonly, getter = getModelMatrix) GLKMatrix4 m_modelMatrix;
-
-@end
-
-@implementation BFDefaultMesh
-
--(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix
-{
-    if (primitive == GL_POINTS)
-        return [self initWithData:data Indices:[NSArray array] GLPrimitive:primitive Matrix:matrix];  // TODO: Нужно подумать, как обрабатывать пустой массив индексов
-
-    NSMutableArray *indices = [NSMutableArray array];
-    NSMutableArray *dictionary = [NSMutableArray array];
-    
-    int index = 0;
-    for (NSArray *triangle in data)
-        for (BFValue *point in triangle)
-        {
-            NSUInteger number;
-            if ((number = [dictionary indexOfObjectIdenticalTo:point]) == NSNotFound)
-            {
-                [dictionary addObject:point];
-                [indices addObject:[NSNumber numberWithInt:index]];
-                
-                index++;
-            }
-            else
-                [indices addObject:[NSNumber numberWithUnsignedInt:number]];
-        }
-    
-    return [self initWithData:dictionary Indices:indices GLPrimitive:primitive Matrix:matrix];
-}
-
--(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix
-{
-    self = [super init];
-    if (self)
-    {
-        m_dataCount = [data count];
-        m_indicesCount = [indices count];
-        m_data = (BFVertex *)malloc(m_dataCount * sizeof(BFVertex));
-        m_indices = (GLuint *)malloc(m_indicesCount * sizeof(GLuint));
-        
-        for (int i = 0; i < m_dataCount; i++)
-            m_data[i] = [[data objectAtIndex:i] BFVertex];
-        
-        for (int i = 0; i < m_indicesCount; i++)
-            m_indices[i] = [[indices objectAtIndex:i] intValue];
-        
-        m_primitive = primitive;
-        m_modelMatrix = matrix;
-    }
-    
-    return self;
-}
-
--(void)dealloc
-{
-    if (m_data)
-        free(m_data);
-    
-    if (m_indices)
-        free(m_indices);
-}
-
-@synthesize m_data, m_indices, m_dataCount, m_indicesCount, m_primitive, m_modelMatrix;
-
-@end
 
 @implementation BFSpline
 
@@ -641,13 +554,21 @@ float absf(float value)
 
 - (BFPoint3D) getPointAt: (float) t
 {
-    BFPoint3D points[m_order];
-    unsigned int segment_count = [m_points count] - m_order - 1;
-    unsigned int segment       = (unsigned int) ceilf(t * segment_count);
+    if (t < 0 || t > 1) {
+        NSException* wrong_t = [NSException exceptionWithName:@"WrongTValueException"
+                                                       reason:[[NSString alloc] initWithFormat:@"t must be in [0 .. 1], not %f;", t]
+                                                     userInfo:nil];
+        @throw wrong_t;
+    }
     
-    float segment_t = t * segment_count / segment;
+    BFPoint3D points[m_order];
+    unsigned int degree        = m_order - 1;
+    unsigned int segment_count = (unsigned int) [m_points count] / degree;
+    unsigned int segment       = (unsigned int) (t == 1)?segment_count - 1:floor(t * segment_count);
+    
+    float segment_t = t * segment_count - segment;
     for (int i = 0; i < m_order; i++)
-        points[i] = [[m_points objectAtIndex:segment + i - 1] BFPoint3D];
+        points[i] = [[m_points objectAtIndex:segment * degree + i] BFPoint3D];
     
     switch (m_order) {
         case 2:
@@ -675,13 +596,21 @@ float absf(float value)
 
 - (BFPoint3D) getNormalAt: (float) t
 {
-    BFPoint3D points[m_order];
-    unsigned int segment_count = [m_points count] - m_order - 1;
-    unsigned int segment       = (unsigned int) ceilf(t * segment_count);
+    if (t < 0 || t > 1) {
+        NSException* wrong_t = [NSException exceptionWithName:@"WrongTValueException"
+                                                       reason:[[NSString alloc] initWithFormat:@"t must be in [0 .. 1], not %f;", t]
+                                                     userInfo:nil];
+        @throw wrong_t;
+    }
     
-    float segment_t = t * segment_count / segment;
+    BFPoint3D points[m_order];
+    unsigned int degree        = m_order - 1;
+    unsigned int segment_count = (unsigned int) [m_points count] / degree;
+    unsigned int segment       = (unsigned int) (t == 1)?segment_count - 1:ceilf(t * segment_count);
+    
+    float segment_t = t * segment_count - segment;
     for (int i = 0; i < m_order; i++)
-        points[i] = [[m_points objectAtIndex:segment + i - 1] BFPoint3D];
+        points[i] = [[m_points objectAtIndex:segment * degree + i] BFPoint3D];
     
     switch (m_order) {
         case 2:
@@ -709,16 +638,6 @@ float absf(float value)
 
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count
 {
-    return [self getLineFrom:t_start To:t_end WithSegments:count WithBlock:NULL];
-}
-
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle
-{
-    return [self getLineFrom:t_start To:t_end WithMinAngle:angle WithBlock:NULL];
-}
-
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count WithBlock:(BFPerPointBlock) block
-{
     int point_count = count * [m_points count] - 2;
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
@@ -736,12 +655,12 @@ float absf(float value)
     return result;
 }
 
-- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle WithBlock:(BFPerPointBlock) block
+- (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle
 {
     NSMutableArray *result = [[NSMutableArray alloc] init];
     if (!result)
         return result;
-    
+
     float delta = (t_end - t_start) / [m_points count];
     
     [result addObject: [BFValue valueWithBFPoint3D: [self getPointAt: t_start]]];
@@ -755,10 +674,10 @@ float absf(float value)
 
 - (void) getLineRecursive: (NSMutableArray *) result From: (float) t_start To: (float) t_end WithMinAngle: (float) angle
 {
-    if (absf(t_end - t_start) <=  MIN_DELTA_T)
+    if (fabsf(t_end - t_start) <=  MIN_DELTA_T)
         return;
     
-    float t_middle = (t_start - t_end) / 2;
+    float t_middle = (t_end - t_start) / 2;
     
     BFPoint3D start_point  = [[result lastObject] BFPoint3D];
     BFPoint3D end_point    = [self getPointAt:t_end];
@@ -776,7 +695,7 @@ float absf(float value)
                                  (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2) *
                                   sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2))));
     
-    if (absf(angle_between_points) > cosf(angle))
+    if (fabsf(angle_between_points) > cosf(angle))
     {
         [self getLineRecursive:result From:t_start To:t_middle WithMinAngle:angle];
         [result addObject: [BFValue valueWithBFPoint3D: middle_point]];
@@ -915,7 +834,7 @@ float absf(float value)
     if (!result)
         return result;
     
-    if (fabs(first->u - last->u) >= MACHINE_EPSILON)
+    if (fabsf(first->u - last->u) >= MIN_DELTA_T)
     {
         BFLine *line = [[BFLine alloc] initWithPointsUV:*first :*last];
         NSArray *array = [m_spline getLineFrom:first->u To:last->u WithMinAngle:angle];
@@ -967,7 +886,7 @@ float absf(float value)
 //                                                                                   }]];
         BFPointUV firstPoint = [points[i] BFPointUV];
         BFPointUV secondPoint = [points[i + 1] BFPointUV];
-        if (fabs(firstPoint.u - secondPoint.u) >= MACHINE_EPSILON)
+        if (fabs(firstPoint.u - secondPoint.u) >= MIN_DELTA_T)
         {
             NSArray *segment_result =  [m_spline getLineFrom:firstPoint.u
                                                           To:secondPoint.u WithSegments:count];
@@ -1020,7 +939,7 @@ float absf(float value)
     {
         BFPointUV firstPoint = [points[i] BFPointUV];
         BFPointUV secondPoint = [points[i + 1] BFPointUV];
-        if (fabs(firstPoint.u - secondPoint.u) >= MACHINE_EPSILON)
+        if (fabsf(firstPoint.u - secondPoint.u) >= MIN_DELTA_T)
         {
             NSArray *segment_result = [m_spline getLineFrom:firstPoint.u
                                                          To:secondPoint.u WithMinAngle:angle];
@@ -1070,7 +989,7 @@ float absf(float value)
         return result;
     
     
-    
+    /*
     NSMutableArray *outlinePoints = [NSMutableArray array];
     [outlinePoints addObjectsFromArray:[self getLineByPoints:points WithSegments:count]];  // NSArray<BFvertex>
     [outlinePoints removeLastObject];
@@ -1087,7 +1006,7 @@ float absf(float value)
                                                       [triangles objectAtIndex:i + 2], nil];
         
         [result addObjectsFromArray:[self getSurfaceByPoints:triangle WithSegments:count]];
-    }
+    }*/
     
     return result;
 }
@@ -1247,3 +1166,69 @@ float absf(float value)
 @synthesize spline = m_spline;
 
 @end
+
+
+@implementation BFDefaultMesh
+
+-(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix
+{
+    if (primitive == GL_POINTS)
+        return [self initWithData:data Indices:[NSArray array] GLPrimitive:primitive Matrix:matrix];  // TODO: Нужно подумать, как обрабатывать пустой массив индексов
+
+    NSMutableArray *indices = [NSMutableArray array];
+    NSMutableArray *dictionary = [NSMutableArray array];
+
+    int index = 0;
+    for (NSArray *triangle in data)
+        for (BFValue *point in triangle)
+        {
+            NSUInteger number;
+            if ((number = [dictionary indexOfObjectIdenticalTo:point]) == NSNotFound)
+            {
+                [dictionary addObject:point];
+                [indices addObject:[NSNumber numberWithInt:index]];
+
+                index++;
+            }
+            else
+                [indices addObject:[NSNumber numberWithUnsignedInt:number]];
+        }
+
+    return [self initWithData:dictionary Indices:indices GLPrimitive:primitive Matrix:matrix];
+}
+
+-(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix
+{
+    self = [super init];
+    if (self)
+    {
+        m_dataCount = [data count];
+        m_indicesCount = [indices count];
+        m_data = (BFVertex *)malloc(m_dataCount * sizeof(BFVertex));
+        m_indices = (GLuint *)malloc(m_indicesCount * sizeof(GLuint));
+
+        for (int i = 0; i < m_dataCount; i++)
+            m_data[i] = [[data objectAtIndex:i] BFVertex];
+
+        for (int i = 0; i < m_indicesCount; i++)
+            m_indices[i] = [[indices objectAtIndex:i] intValue];
+
+        m_primitive = primitive;
+        m_modelMatrix = matrix;
+    }
+
+    return self;
+}
+
+-(void)dealloc
+{
+    if (m_data)
+        free(m_data);
+
+    if (m_indices)
+        free(m_indices);
+}
+
+@synthesize m_data, m_indices, m_dataCount, m_indicesCount, m_primitive, m_modelMatrix;
+
+@end  // BFDefaultMesh

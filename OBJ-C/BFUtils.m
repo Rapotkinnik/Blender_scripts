@@ -83,7 +83,7 @@
         if (m_isEnumerationAtFirstElem)
         {
             m_isEnumerationAtFirstElem = NO;
-            return [m_list getCurValue];
+            return [[m_list getCur] getValue];
         }
         
         [m_list goNext];
@@ -91,7 +91,7 @@
         if ([m_list isBOList])
             return nil;
         
-        return [m_list getCurValue];
+        return [[m_list getCur] getValue];
     }
     else
         return nil;
@@ -234,7 +234,7 @@
     [self goBOList];
     do
     {
-        if ([[self getCurValue] isEqual: value])
+        if ([[[self getCur] getValue] isEqual: value])
             return YES;
         
         [self goNext];
@@ -247,7 +247,7 @@
 -(BOOL)isContainValue:(id)value
 {
     for (id elem in self)
-        if ([[elem getCurValue] isEqual: value])
+        if ([[[elem getCur] getValue] isEqual: value])
             return YES;
     
     return NO;
@@ -261,8 +261,8 @@
         
         if (m_size == 1)
         {
-            _cur = nil;
-            _first = nil;
+            m_cur = nil;
+            m_first = nil;
         }
         else
         {
@@ -307,7 +307,7 @@
     
     id object;
     while (object = [enumerator nextObject])
-        [self appendWithValue:object];
+        [self appendValue:object];
 }
 
 -(void)insertValueAfterCurrent:(id)value
@@ -369,28 +369,28 @@
 //    return 1;
 //}
 
-- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state objects:(id *)buffer count:(NSUInteger)len
+- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state objects:(id __unsafe_unretained *)buffer count:(NSUInteger)len
 {
     if (state->state == 0)
     {
-        state->mutationsPtr = (unsigned long *)self;
+        state->mutationsPtr = (unsigned long *)(__bridge void *)self;
         state->state = 1;
         state->extra[0] = (unsigned long)[m_first getNext];
         
         if ([self getSize] == 0)
             return 0;
         
-        id obj = [m_first getValue];
+        id __unsafe_unretained obj = [m_first getValue];
         state->itemsPtr = &obj;
         
         return 1;
     }
     
-    BFListElem *elem = (BFListElem *)state->extra[0];
+    BFListElem *elem = (__bridge BFListElem *)(void *)state->extra[0];
     if (elem == m_first)
         return 0;
     
-    id obj = [elem getValue];
+    id __unsafe_unretained obj = [elem getValue];
     state->itemsPtr = &obj;
     
     state->extra[0] = (unsigned long)[elem getNext];
