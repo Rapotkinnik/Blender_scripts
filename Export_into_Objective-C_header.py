@@ -1038,10 +1038,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    '{\n\treturn [self getSurfaceByPoints:points WithMinAngle:angle OnSpline:0];\n}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
                    '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithSegments:count];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINES Matrix:m_objectMatrix];\n}\n\n')
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
                    '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithMinAngle:angle];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINES Matrix:m_objectMatrix];\n}\n\n')
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n}\n\n')
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
                    '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithSegments:count];\n'
                    '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')

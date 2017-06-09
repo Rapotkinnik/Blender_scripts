@@ -384,10 +384,16 @@ BOOL IsConvex(BFListElem *curElem, BFCircularList *poly, BFGetPointUVFromValue b
     
     if (isOkFirst && isOkLast)
     {
-        for (BFListElem *elem in poly)
+        //for (BFListElem *elem in poly)
+        BFListElem * cur = [poly getCur];
+        while ([poly getCur] != cur) {
+            BFListElem * elem = [poly getCur];
             if ([line isIntersectedBy:[BFLine lineWithPointsUV:block([elem getValue], &isOkFirst)
                                                               :block([[elem getNext] getValue], &isOkLast)]] == Intersection && isOkFirst && isOkLast)
                 return NO;
+            
+            [poly goNext];
+        }
     }
     
     return YES;
@@ -440,10 +446,10 @@ BOOL IsConvex(BFListElem *curElem, BFCircularList *poly, BFGetPointUVFromValue b
          if (IsConvex([list getCur], list, block))
          {
              BFListElem *curElem = [list getCur];
-             NSMutableArray *triangle = [NSMutableArray arrayWithObjects:[curElem getValue],
-                                                                         [[curElem getNext] getValue],
-                                                                         [[curElem getPrev] getValue], nil];
-             [result addObject:triangle];
+             [result addObject:[curElem getValue]];
+             [result addObject:[[curElem getNext] getValue]];
+             [result addObject:[[curElem getPrev] getValue]];
+
              [list removeCur];
          }
          else
@@ -585,10 +591,9 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
             break;
     }
     
-    NSException* unsupported_order = [NSException
-                                      exceptionWithName:@"UnSupportedOrderException"
-                                      reason:[[NSString alloc] initWithFormat:@"This order=%d is unsupported!", m_order]
-                                      userInfo:nil];
+    NSException* unsupported_order = [NSException exceptionWithName:@"UnSupportedOrderException"
+                                                             reason:[[NSString alloc] initWithFormat:@"This order=%d is unsupported!", m_order]
+                                                           userInfo:nil];
     @throw unsupported_order;
     
     return (BFPoint3D) {};
@@ -606,7 +611,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     BFPoint3D points[m_order];
     unsigned int degree        = m_order - 1;
     unsigned int segment_count = (unsigned int) [m_points count] / degree;
-    unsigned int segment       = (unsigned int) (t == 1)?segment_count - 1:ceilf(t * segment_count);
+    unsigned int segment       = (unsigned int) (t == 1)?segment_count - 1:floor(t * segment_count);
     
     float segment_t = t * segment_count - segment;
     for (int i = 0; i < m_order; i++)
@@ -627,10 +632,9 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
             break;
     }
     
-    NSException* unsupported_order = [NSException
-                                      exceptionWithName:@"UnSupportedOrderException"
-                                      reason:[[NSString alloc] initWithFormat:@"This order=%d is unsupported!", m_order]
-                                      userInfo:nil];
+    NSException* unsupported_order = [NSException exceptionWithName:@"UnSupportedOrderException"
+                                                             reason:[[NSString alloc] initWithFormat:@"This order=%d is unsupported!", m_order]
+                                                           userInfo:nil];
     @throw unsupported_order;
     
     return (BFPoint3D) {};
@@ -639,9 +643,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithSegments: (int) count
 {
     int point_count = count * [m_points count] - 2;
-    NSMutableArray *result = [[NSMutableArray alloc] init];
-    if (!result)
-        return result;
+    NSMutableArray *result = [NSMutableArray array];
     
     float delta = (t_end - t_start) / point_count;
     for (int segment = 0; segment < point_count; segment++)
@@ -657,18 +659,46 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 
 - (NSArray *) getLineFrom: (float) t_start To: (float) t_end WithMinAngle: (float) angle
 {
-    NSMutableArray *result = [[NSMutableArray alloc] init];
-    if (!result)
-        return result;
-
+    NSMutableArray *result = [NSMutableArray array];
+    
+    float t_max = MIN(t_start, t_end);
+    float t_min = MAX(t_start, t_end);
+    
+    NSInteger point_count = [m_points count];
+    NSMutableArray *segments = [NSMutableArray arrayWithObject:[NSNumber numberWithFloat:t_start]];
+    for (int i = 0; i < point_count; i = i + m_order - 1)
+    {
+        float edge_point_t = 1.0 * i / (point_count - 1);
+        if (t_max < edge_point_t && edge_point_t < t_min)  // Возможно стоит использовать fabsf(t_start - edge_point_t) < MIN_DELTA_T
+            [segments addObject:[NSNumber numberWithFloat:edge_point_t]];
+    }
+    
+    [segments addObject:[NSNumber numberWithFloat:t_end]];
+    
+    [result addObject:[BFValue valueWithBFPoint3D:[self getPointAt:t_start]
+                                         MetaData:@{@"t":[NSNumber numberWithFloat:t_start]}]];
+    
+    for (int i = 0; i < [segments count] - 1; i++)
+    {
+        float end_t    = [segments[i + 1] floatValue];
+        float start_t  = [segments[i    ] floatValue];
+        float middle_t = start_t + (end_t - start_t) / 2;
+        
+        [self getLineRecursive:result From:start_t  To:middle_t WithMinAngle:angle];
+        [self getLineRecursive:result From:middle_t To:end_t    WithMinAngle:angle];
+    }
+    
+    /*
     float delta = (t_end - t_start) / [m_points count];
     
-    [result addObject: [BFValue valueWithBFPoint3D: [self getPointAt: t_start]]];
+    [result addObject: [BFValue valueWithBFPoint3D:[self getPointAt:t_start]
+                                          MetaData:@{@"t":[NSNumber numberWithFloat:t_start]}]];
     for (int index = 0; index < [m_points count]; index++)
         [self getLineRecursive:result From:t_start + delta * index To:t_start + delta * (index + 1) WithMinAngle:angle];
     
-    [result addObject: [BFValue valueWithBFPoint3D: [self getPointAt: t_end]]];
-    
+    [result addObject: [BFValue valueWithBFPoint3D:[self getPointAt: t_end]
+                                          MetaData:@{@"t": [NSNumber numberWithFloat:t_end]}]];
+     */
     return result;
 }
 
@@ -677,7 +707,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     if (fabsf(t_end - t_start) <=  MIN_DELTA_T)
         return;
     
-    float t_middle = (t_end - t_start) / 2;
+    float t_middle = t_start + (t_end - t_start) / 2;
     
     BFPoint3D start_point  = [[result lastObject] BFPoint3D];
     BFPoint3D end_point    = [self getPointAt:t_end];
@@ -691,18 +721,20 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
                             start_point.y - middle_point.y,
                             start_point.z - middle_point.z };
     
-    float angle_between_points = (vector_me.x * vector_ms.x + vector_me.y * vector_ms.z + vector_me.x * vector_ms.z) /
-                                 (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2) *
-                                  sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2))));
+    float angle_between_points = (vector_me.x * vector_ms.x + vector_me.y * vector_ms.y + vector_me.z * vector_ms.z) /
+                                 (sqrtf(powf(vector_me.x, 2) + powf(vector_me.y, 2) + powf(vector_me.z, 2)) *
+                                  sqrtf(powf(vector_ms.x, 2) + powf(vector_ms.y, 2) + powf(vector_ms.z, 2)));
     
-    if (fabsf(angle_between_points) > cosf(angle))
+    if (angle_between_points > cosf(M_PI * (180 - angle) / 180))
     {
         [self getLineRecursive:result From:t_start To:t_middle WithMinAngle:angle];
-        [result addObject: [BFValue valueWithBFPoint3D: middle_point]];
+        [result addObject: [BFValue valueWithBFPoint3D: middle_point MetaData:@{@"t": [NSNumber numberWithFloat:t_middle]}]];
         [self getLineRecursive:result From:t_middle To:t_end WithMinAngle:angle];
     }
     else
-        [result addObject: [BFValue valueWithBFPoint3D: middle_point]];
+        [result addObject: [BFValue valueWithBFPoint3D: middle_point MetaData:@{@"t": [NSNumber numberWithFloat:t_middle]}]];
+    
+    [result addObject: [BFValue valueWithBFPoint3D: end_point MetaData:@{@"t": [NSNumber numberWithFloat:t_end]}]];
 }
 
 @synthesize points = m_points;
@@ -848,7 +880,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
             vertex.normal = [m_spline getNormalAt:t];
             vertex.textureCoord = (BFPointUV) {t, [line vFromU:t]};
             
-            [result addObject:[NSValue valueWithBFVertex:vertex]];
+            [result addObject:[BFValue valueWithBFVertex:vertex]];
         }
     }
     else
@@ -861,8 +893,8 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
         firstVertex.textureCoord = *first;
         lastVertex.textureCoord = *last;
         
-        [result addObject:[NSValue valueWithBFVertex:firstVertex]];
-        [result addObject:[NSValue valueWithBFVertex:lastVertex]];
+        [result addObject:[BFValue valueWithBFVertex:firstVertex]];
+        [result addObject:[BFValue valueWithBFVertex:lastVertex]];
     }
     
     return result;
@@ -907,7 +939,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
                 vertex.normal = [m_spline getNormalAt:t];
                 vertex.textureCoord = (BFPointUV) {t, [segment_line vFromU:t]};
             
-                [result addObject:[NSValue valueWithBFVertex:vertex]];
+                [result addObject:[BFValue valueWithBFVertex:vertex]];
             }
         }
         else
@@ -920,9 +952,9 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
             fistVertex.textureCoord = secondVertex.textureCoord = firstPoint;
             
             if (i == 0)
-                [result addObject:[NSValue valueWithBFVertex:fistVertex]];
+                [result addObject:[BFValue valueWithBFVertex:fistVertex]];
             
-            [result addObject:[NSValue valueWithBFVertex:secondVertex]];
+            [result addObject:[BFValue valueWithBFVertex:secondVertex]];
         }
     }
 
@@ -960,7 +992,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
                 vertex.normal = [m_spline getNormalAt:t];
                 vertex.textureCoord = (BFPointUV) {t, [segment_line vFromU:t]};
                 
-                [result addObject:[NSValue valueWithBFVertex:vertex]];
+                [result addObject:[BFValue valueWithBFVertex:vertex]];
             }
         }
         else
@@ -973,9 +1005,9 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
             fistVertex.textureCoord = secondVertex.textureCoord = firstPoint;
             
             if (i == 0)
-                [result addObject:[NSValue valueWithBFVertex:fistVertex]];
+                [result addObject:[BFValue valueWithBFVertex:fistVertex]];
             
-            [result addObject:[NSValue valueWithBFVertex:secondVertex]];
+            [result addObject:[BFValue valueWithBFVertex:secondVertex]];
         }
     }
     
@@ -1025,18 +1057,19 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     
     NSArray *triangles = BFTriangulateWithGetPointUVFunc(outlinePoints, ^BFPointUV(id value, BOOL *isOK) {
                                                                              *isOK = YES;
-                                                                             return [value BFPointUV];
-                                                                         });  // Тут возвращается массив массивов (треугольников)
+                                                                             return [value BFVertexRef]->textureCoord;
+                                                                         });  // Тут возвращается массив точек по три (треугольников)
     
     if ([outlinePoints count] <= 6)  // Функция getLineByPoints для треугольника вернет минимум 6 точек!
         return outlinePoints;
     
-    for (NSArray *triangle in triangles)
+    for (int i = 0; i < [triangles count]; i = i + 3)
     {
         NSMutableArray *pointsUV = [NSMutableArray array];
-        for (BFValue *value in triangle)
-            [pointsUV addObject:[NSValue valueWithBFPointUV:[value BFVertexRef]->textureCoord]];
-    
+        [pointsUV addObject:[NSValue valueWithBFPointUV:[triangles[i    ] BFVertexRef]->textureCoord]];
+        [pointsUV addObject:[NSValue valueWithBFPointUV:[triangles[i + 1] BFVertexRef]->textureCoord]];
+        [pointsUV addObject:[NSValue valueWithBFPointUV:[triangles[i + 2] BFVertexRef]->textureCoord]];
+        
         [result addObjectsFromArray:[self getSurfaceByPoints:pointsUV WithMinAngle:angle]];
     }
     
@@ -1179,20 +1212,19 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     NSMutableArray *dictionary = [NSMutableArray array];
 
     int index = 0;
-    for (NSArray *triangle in data)
-        for (BFValue *point in triangle)
+    for (BFValue *point in data)
+    {
+        NSUInteger number;
+        if ((number = [dictionary indexOfObjectIdenticalTo:point]) == NSNotFound)
         {
-            NSUInteger number;
-            if ((number = [dictionary indexOfObjectIdenticalTo:point]) == NSNotFound)
-            {
-                [dictionary addObject:point];
-                [indices addObject:[NSNumber numberWithInt:index]];
+            [dictionary addObject:point];
+            [indices addObject:[NSNumber numberWithInt:index]];
 
-                index++;
-            }
-            else
-                [indices addObject:[NSNumber numberWithUnsignedInt:number]];
+            index++;
         }
+        else
+            [indices addObject:[NSNumber numberWithUnsignedInt:number]];
+    }
 
     return [self initWithData:dictionary Indices:indices GLPrimitive:primitive Matrix:matrix];
 }
