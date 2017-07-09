@@ -1119,15 +1119,11 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
     NSMutableArray *result = [NSMutableArray array];
     NSArray *splinePoints = [m_spline getLineFrom:0.0 To:1.0 WithSegments:count];
     
-    [indices addObjectsFromArray:[NSArray arrayWithObjects:0, 1, 2, nil]];
-    for (int i = 0; i < [splinePoints count] - 1; i = i + 2)
+    for (int i = 0; i < 2 * [splinePoints count] - 2; i++)
     {
         [indices addObject:[NSNumber numberWithInt:i    ]];
         [indices addObject:[NSNumber numberWithInt:i + 1]];
         [indices addObject:[NSNumber numberWithInt:i + 2]];
-        [indices addObject:[NSNumber numberWithInt:i + 1]];
-        [indices addObject:[NSNumber numberWithInt:i + 2]];
-        [indices addObject:[NSNumber numberWithInt:i + 3]];
     }
     
     for (BFValue *point in splinePoints)
@@ -1158,17 +1154,13 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 - (NSArray *) getWholeSurface:(NSMutableArray *)indices WithMinAngle:(float)angle;
 {
     NSMutableArray *result = [NSMutableArray array];
-    NSArray *splinePoints = [m_spline getLineFrom:0.0 To:1.0 WithMinAngle:angle];  // 150 * M_PI_2/180];
+    NSArray *splinePoints = [m_spline getLineFrom:0.0 To:1.0 WithMinAngle:angle];
     
-    [indices addObjectsFromArray:[NSArray arrayWithObjects:0, 1, 2, nil]];
-    for (int i = 0; i < [splinePoints count] - 1; i = i + 2)
+    for (int i = 0; i < 2 * [splinePoints count] - 2; i++)
     {
         [indices addObject:[NSNumber numberWithInt:i    ]];
         [indices addObject:[NSNumber numberWithInt:i + 1]];
         [indices addObject:[NSNumber numberWithInt:i + 2]];
-        [indices addObject:[NSNumber numberWithInt:i + 1]];
-        [indices addObject:[NSNumber numberWithInt:i + 2]];
-        [indices addObject:[NSNumber numberWithInt:i + 3]];
     }
     
     for (BFValue *point in splinePoints)
