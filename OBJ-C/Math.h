@@ -138,6 +138,14 @@ typedef enum
 
 @end
 
+float LinearBezierCurve1D(const float values[2], float t);
+float QuadraticBezierCurve1D(const float values[3], float t);
+float CubicBezierCurve1D(const float values[4], float t);
+float QuadricBezierCurve1D(const float values[5], float t);
+float QuinticBezierCurve1D(const float values[6], float t);
+
+float getPointOnCurve(const float *values, int size, int order, float t);
+
 BFPoint3D MakeNormal(BFPoint3D *point);
 
 BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t);

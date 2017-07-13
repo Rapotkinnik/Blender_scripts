@@ -268,6 +268,57 @@ static const float MACHINE_EPSILON = 2e-54;
 
 @end
 
+float LinearBezierCurve1D(const float values[2], float t)
+{
+    return (1 - t) * values[0].x + t * values[1].x;
+}
+
+float QuadraticBezierCurve1D(const float values[3], float t)
+{
+    return pow(1 - t, 2) * values[0].x + 2 * t * (1 - t) * values[1].x + t * t * values[2].x;
+}
+
+float CubicBezierCurve1D(const float values[4], float t)
+{
+    return pow(1 - t, 3) * values[0].x + 3 * pow(1 - t, 2) * t * values[1].x + 3 * (1 - t) * t * t * values[2].x + pow(t, 3) * values[3].x;
+}
+
+float QuadricBezierCurve1D(const float values[5], float t)
+{
+    return pow(1 - t, 4) * values[0].x + 4 * pow(1 - t, 3) * t * values[1].x + 6 * pow(1 - t, 2) * t * t * values[2].x + 4 * pow(t, 3) * (1 - t) * values[3].x + pow(t, 4) * values[4].x;
+}
+
+float QuinticBezierCurve1D(const float values[6], float t)
+{
+    return 0.0;
+}
+
+float getPointOnCurve(const float *values, int size, int order, const float t)
+{
+    unsigned int degree        = order - 1;
+    unsigned int segment_count = (unsigned int) size / degree;
+    unsigned int segment       = (unsigned int) (t == 1)?segment_count - 1:floor(t * segment_count);
+
+    float segment_t = t * segment_count - segment;
+
+    switch (order) {
+        case 2:
+            return LinearBezierCurve1D(points + segment * degree, segment_t);
+        case 3:
+            return QuadraticBezierCurve1D(points + segment * degree, segment_t);
+        case 4:
+            return CubicBezierCurve1D(points + segment * degree, segment_t);
+        case 5:
+            return QuadricBezierCurve1D(points + segment * degree, segment_t);
+        case 6:
+            return QuinticBezierCurve1D(points + segment * degree, segment_t);
+        default:
+            break;
+    }
+
+    return 0.0;
+}
+
 BFPoint3D MakeNormal(BFPoint3D * const point)
 {
     BFPoint3D result;
@@ -283,7 +334,7 @@ BFPoint3D MakeNormal(BFPoint3D * const point)
 BFPoint3D LinearBezierCurve(const BFPoint3D points[2], float t)
 {
     BFPoint3D result;
-    result.x = (1 - t) * points[0].x + t * points[1].x;
+    result.x = (1 - t) * points[0].x + t * points[1].x; // = LinearBezierCurve1D((float[2]){points[0].x, points[1].x}, t)
     result.y = (1 - t) * points[0].y + t * points[1].y;
     result.z = (1 - t) * points[0].z + t * points[1].z;
     return result;
@@ -528,7 +579,6 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 //}
 //
 //@end
-
 
 @implementation BFSpline
 

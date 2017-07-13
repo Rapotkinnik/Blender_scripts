@@ -33,25 +33,43 @@ from bpy_extras.io_utils import ExportHelper, orientation_helper_factory, path_r
 
 IOOBJOrientationHelper = orientation_helper_factory("IOOBJOrientationHelper", axis_forward='-Z', axis_up='Y')
 
+# import sympy
+# x = sympy.symbols('x')
+# sympy.interpolate([(-1, 2), (1, 2), (2, 5)], x)
+# x ** 2 + 1
 
-def lagranz(x, y, t):
-    z = 0
-    for j in range(len(y)):
-        p1 = 1
-        p2 = 1
-        for i in range(len(x)):
-            if i == j:
-                p1 = p1 * 1
-                p2 = p2 * 1
-            else:
-                p1 = p1 * (t - x[i])
-                p2 = p2 * (x[j] - x[i])
-        z = z + y[j] * p1 / p2
-    return z
+# from scipy.interpolate import interp1d
+# x = np.linspace(0, 10, 10)
+# y = np.exp(-x / 3.0)
+# f = interp1d(x, y)
+# f2 = interp1d(x, y, kind=’cubic’)
 
-def string_interpolation(table):
-    str_function = ""
-    return str_function
+def bezier_interpolation(points):
+    bezier_points = []
+    if len(points) == 2:
+        bezier_points.append(points[0])
+        bezier_points.append((2 * points[0] + points[1]) / 3)
+        bezier_points.append(2 * bezier_points[-1] - points[0])
+        bezier_points.append(points[1])
+        return bezier_points
+
+    right_side_handles = [points[0] + 2 * points[1]]
+    for p_index in range(1, len(points) - 2):
+        right_side_handles.append(4 * points[p_index] + 2 * points[p_index + 1])
+    right_side_handles.append(4 * points[-2] + points[-1] / 2) # or 8 * points[-2] + points[-1] wtf?
+
+    first_control_points = [right_side_handles[0] / 2]
+    for p_index in range(1, len(right_side_handles) - 1):
+        pass
+
+    for p_index in range(0, len(points) - 1):
+        bezier_points.append(points[p_index]) # P0
+        bezier_points.append(first_control_points[p_index]) # P1
+        bezier_points.append(2 * points[p_index + 1] - first_control_points[p_index + 1]) # P2
+
+    bezier_points[-1] = 0.5 * (points[-1] + bezier_points[-2]) # P2 for last segment
+    bezier_points.append(points[-1])
+    return bezier_points
 
 def name_compact(name):
     if name is None:
@@ -81,7 +99,7 @@ def bezier_points_for_bezier_spline(spline):
         bezier_points.append(points[i].handle_right)
         bezier_points.append(points[i + 1].handle_left)
     else:
-        bezier_points.append(points[i].co)
+        bezier_points.append(points[-1].co)  # has been i
 
     return bezier_points
 
@@ -946,10 +964,48 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('\tGLKMatrix4 m_objectMatrix;\n')
         file.write('}\n\n')
         # Здесь методы, реализующие анимацию объекта
-        action = surface.animation_data.action
-        if action:
+        actions = list(surface.animation_data.action)
+        for nla_track in surface.animation_data.nla_tracks:
+            file.write('\t-(void)%s:(float)t;' % nla_track.name)
+
+        for action in actions:
             file.write('\t-(void)%s:(float)t;' % action.name)
         file.write('@end\n\n')
+
+        '''
+         (start_frame, end_frame) = action.frame_range
+            for s_index, spline in enumerate(surface.splines):
+                list_of_bezier_points = {}
+                for frame in range(int(start_frame), int(end_frame) + 1):
+                    context.scene.frame_set(frame)
+                    t = frame / (end_frame - start_frame)
+                    if spline.type == 'BEZIER':
+                        list_of_bezier_points[t] = bezier_points_for_bezier_spline(spline)
+
+                for p_index in range(point_count_array[s_index]): # количество точек в сплайне
+                    str_for_x = string_interpolation(
+                        [(t, bezier_points[p_index][0]) for (t, bezier_points) in list_of_bezier_points.items()])
+                    str_for_y = string_interpolation(
+                        [(t, bezier_points[p_index][1]) for (t, bezier_points) in list_of_bezier_points.items()])
+                    str_for_z = string_interpolation(
+                        [(t, bezier_points[p_index][2]) for (t, bezier_points) in list_of_bezier_points.items()])
+
+                    if str_for_x:
+                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->x = %s;\n' % (s_index, p_index, str_for_x))
+                    if str_for_y:
+                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->y = %s;\n' % (s_index, p_index, str_for_y))
+                    if str_for_z:
+                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->z = %s;\n' % (s_index, p_index, str_for_y))
+
+            file.write('\n}\n\n')
+
+        for nla_track in surface.animation_data.nla_tracks:
+            file.write('-(void)%s:(float)t\n{\n' % nla_track.name)
+            for nla_strip in nla_track.strips:
+                action = nla_strip.action  # |--action_1--|.......|--action_2--|
+            file.write('\n}\n\n')
+         '''
+
 
         file.write('@implementation BF%s\n\n' % kwargs['name'])
         file.write('-(id)init\n{\n'
@@ -965,77 +1021,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
             # https://www.codeproject.com/Articles/996281/NURBS-curve-made-easy
             if spline.type == 'NURBS':
-                points = list(spline.points)
-                if spline.use_cyclic_u:
-                    points.append(spline.points[0])
-
-                if spline.order_u == 2:
-                    bezier_points.extend(points)
-                    break
-
-                knots = [0]
-                for i, point in enumerate(points):
-                    knots.append(knots[i] + point.weight)
-
-                if spline.order_u == 3:
-                    for i in range(len(points) - spline.order_u + 1):
-                        v = ((knots[i + 3] - knots[i + 2]) * points[i].co[:] +
-                             (knots[i + 2] - knots[i + 1]) * points[i + 1].co[:]) / (knots[i + 3] - knots[i + 1])
-
-                        bezier_points.append(v)
-                        bezier_points.append(points[i + 1].co)
-
-                if spline.order_u == 4:
-                    c = ((knots[5] - knots[4]) * points[0].co[:] +
-                         (knots[4] - knots[2]) * points[1].co[:]) / (knots[5] - knots[2])
-
-                    bezier_points.append(c)
-
-                    for i in range(len(points) - spline.order_u + 1):
-                        b = ((knots[i + 5] - knots[i + 3]) * points[i + 1].co[:] +
-                             (knots[i + 3] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 5] - knots[i + 2])
-                        c = ((knots[i + 5] - knots[i + 4]) * points[i + 1].co[:] +
-                             (knots[i + 4] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 5] - knots[i + 2])
-                        v = ((knots[i + 4] - knots[i + 3]) * bezier_points[-1][:] +
-                             (knots[i + 3] - knots[i + 2]) * b[:]) / (knots[i + 4] - knots[i + 2])
-
-                        bezier_points.append(v)
-                        bezier_points.append(b)
-                        bezier_points.append(c)
-
-                    bezier_points = bezier_points[
-                                    1:-2]  # Или придется делать цикл на 1 итерацию меньше и добавять в конце vL
-
-                if spline.order_u == 5:
-                    d = ((knots[6] - knots[5]) * ((knots[6] - knots[5]) * points[0].co[:] +
-                                                  (knots[5] - knots[2]) * points[1].co[:]) / (knots[6] - knots[2]) +
-                         (knots[5] - knots[3]) * ((knots[7] - knots[5]) * points[1].co[:] +
-                                                  (knots[5] - knots[3]) * points[2].co[:]) / (knots[7] - knots[3])) / (knots[6] - knots[3])
-                    bezier_points.append(d)
-
-                    for i in range(len(points) - spline.order_u + 1):
-                        b = ((knots[i + 6] - knots[i + 4]) * ((knots[i + 6] - knots[i + 4]) * points[i + 1].co[:] +
-                                                              (knots[i + 6] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
-                             (knots[i + 4] - knots[i + 3]) * ((knots[i + 7] - knots[i + 4]) * points[i + 2].co[:] +
-                                                              (knots[i + 4] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3])) / (knots[i + 6] - knots[i + 3])
-                        c = ((knots[i + 6] - knots[i + 5]) * ((knots[i + 6] - knots[i + 4]) * points[i + 1].co[:] +
-                                                              (knots[i + 6] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
-                             (knots[i + 4] - knots[i + 3]) * ((knots[i + 7] - knots[i + 5]) * points[i + 2].co[:] +
-                                                              (knots[i + 5] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3]) +
-                             (knots[i + 5] - knots[i + 4]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 3])
-                        d = ((knots[i + 6] - knots[i + 5]) * ((knots[i + 6] - knots[i + 5]) * points[i + 1].co[:] +
-                                                              (knots[i + 5] - knots[i + 2]) * points[i + 2].co[:]) / (knots[i + 6] - knots[i + 2]) +
-                             (knots[i + 5] - knots[i + 3]) * ((knots[i + 7] - knots[i + 5]) * points[i + 2].co[:] +
-                                                              (knots[i + 5] - knots[i + 3]) * points[i + 3].co[:]) / (knots[i + 7] - knots[i + 3])) / (knots[i + 6] - knots[i + 3])
-                        v = ((knots[i + 5] - knots[i + 4]) * bezier_points[-1][:] +
-                             (knots[i + 4] - knots[i + 3]) * b[:]) / (knots[i + 4] - knots[i + 2])
-
-                        bezier_points.append(v)
-                        bezier_points.append(b)
-                        bezier_points.append(c)
-                        bezier_points.append(d)
-
-                    bezier_points = bezier_points[1:-3]
+                bezier_points = bezier_points_for_NURB_spline(spline)
 
             result_str = ''
             point_count_array.append(len(bezier_points))
@@ -1046,13 +1032,47 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             else:
                 result_str = result_str[:-2 if i % 2 == 0 else -3]
 
-            file.write('\t\tBFPoint3D points_%d[] = {\n%s\n\t\t};\n\n' % (index, result_str))
+            file.write('\t\tBFPoint3D spline_%d_points[] = {\n%s\n\t\t};\n\n' % (index, result_str))
 
         for index, spline in enumerate(surface.splines):
             if spline.type == 'BEZIER':
                 file.write('\t\t[m_splines addObject: [[BFExtrudedSpline alloc] initWithSpline:\n'
-                           '\t\t                              [[BFSpline alloc] initWithPoints: points_%d Count:%d Order:%d] Extrude:%d]];\n' %
+                           '\t\t                              [[BFSpline alloc] initWithPoints: spline_%d_points Count:%d Order:%d] Extrude:%d]];\n' %
                            (index, point_count_array[index], 4, surface.extrude))
+
+        interpolation_point_count_array = []
+        for action in actions:
+            # (start_frame, end_frame) = action.frame_range
+            key_frames = []
+            for s_index, spline in enumerate(surface.splines):
+                for p_index, point in enumerate()
+                for frame in range(int(start_frame), int(end_frame) + 1):
+                    context.scene.frame_set(frame)
+                    t = frame / (end_frame - start_frame)
+                    if spline.type == 'BEZIER':
+                        list_of_bezier_points[t] = bezier_points_for_bezier_spline(spline)
+
+                    result_str = ''
+                    point_count_array.append(len(bezier_points))
+                    for i in range(len(bezier_points)):
+                        result_str += '\t\t\t' if i % 2 == 0 else ''
+                        result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[i]))
+                        result_str += '\n' if i % 2 > 0 else ''
+                    else:
+                        result_str = result_str[:-2 if i % 2 == 0 else -3]
+
+                    file.write('\t\tBFPoint3D %s_spline_%d_point_%d_points[] = {\n%s\n\t\t};\n\n' % (action.name.lower(), s_index, p_index, result_str))
+
+        for action in actions:
+            file.write('\t\tNSMutableArray %s_data = {NSMutableArray array};\n\n' % action.name.lower())
+            for s_index, points_count in enumerate(interpolation_point_count_array):
+                file.write('\t\tNSMutableArray %s_data_for_spline_%d = {NSMutableArray array};\n\n' % (action.name.lower(), s_index))
+                for p_index, count in enumerate(points_count):
+                    file.write('\t\t[%s_data_for_spline_%d addObject: [[BFSpline alloc] initWithPoints: %s_spline_%d_point_%d_points Count:%d Order:3];\n' %
+                               (action.name.lower(), s_index, action.name.lower(), s_index, p_index, count))
+
+                file.write('\n\t\t[%s_data addObject: %s_data_for_spline_%d]' % action.name.lower(),  action.name.lower(), s_index)
+
 
         matrix = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
@@ -1060,6 +1080,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][3]))
 
         file.write('\n\t\t m_objectMatrix = GLKMatrix4Make(%s);\n\t}\n\n\treturn self;\n}\n\n' % matrix)
+
         file.write('-(GLKMatrix4)getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n\n')
         file.write('-(BFVertex)getPointAt:(BFPointUV)point\n{\n\treturn [self getPointAt:point OnSpline:0];\n}\n\n')
         file.write('-(BFVertex)getPointAt:(BFPointUV)point OnSpline:(int)spline\n'
@@ -1084,32 +1105,21 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
                    '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithMinAngle:angle];\n'
                    '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')
-        if action:
+
+        for action in actions:
             file.write('-(void)%s:(float)t\n{\n' % action.name)
-            (start_frame, end_frame) = action.frame_range
-            for s_index, spline in enumerate(surface.splines):
-                list_of_bezier_points = []
-                for frame in range(int(start_frame), int(end_frame) + 1):
-                    context.scene.frame_set(frame)
-                    if spline.type == 'BEZIER':
-                        list_of_bezier_points.append(bezier_points_for_bezier_spline(spline))
-
-                for p_index in range(len(list_of_bezier_points[0])):
-                    str_for_x = string_interpolation(
-                        [{point, t} for bezier_points in list_of_bezier_points for point in bezier_points[p_index]])
-                    str_for_y = string_interpolation(
-                        [{point, t} for bezier_points in list_of_bezier_points for point in bezier_points[p_index]])
-                    str_for_z = string_interpolation(
-                        [{point, t} for bezier_points in list_of_bezier_points for point in bezier_points[p_index]])
-
-                    if str_for_x:
-                        file.write('\t[[[m_spline[%d] spline] points][%d]].x = %s;\n' % (s_index, p_index, str_for_x))
-                    if str_for_y:
-                        file.write('\t[[[m_spline[%d] spline] points][%d]].y = %s;\n' % (s_index, p_index, str_for_y))
-                    if str_for_z:
-                        file.write('\t[[[m_spline[%d] spline] points][%d]].z = %s;\n' % (s_index, p_index, str_for_y))
-
-            file.write('\n}\n\n')
+            file.write('\tNSInteger splineCount = [m_splines count];')
+            file.write('\tfor (int spline_index = 0; spline_index < splineCount; spline_index++)\n'
+                       '\t{\n'
+                       '\t\tBFSpline spline = [m_splines objectAtIndex: spline_index];\n'
+                       '\t\tNSInteger pointCount = [spline count];\n'
+                       '\t\tfor (int point_index = 0; point_index < pointCount; point_index++)\n'
+                       '\t\t{\n'
+                       '\t\t\tBFSpline *interpolation_spline = [[m_%s_data objectAtIndex:spline_index] objectAtIndex:point_index];\n'
+                       '\t\t\tif (interpolation_spline)\n'
+                       '\t\t\t\t*[[spline objectAtIndex:point_index] BFPoint3DRef] = [interpolation_spline getPointAt:t];\n'
+                       '\t\t}\n'
+                       '\t}\n\n' % action.name)
 
         file.write('@end')
 
