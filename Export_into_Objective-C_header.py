@@ -46,6 +46,12 @@ IOOBJOrientationHelper = orientation_helper_factory("IOOBJOrientationHelper", ax
 
 def bezier_interpolation(points):
     bezier_points = []
+    for p_index in range(len(points) - 1):
+        if points[p_index] != points[p_index + 1]:
+            break
+    else:
+        return bezier_points  # if all points are equal return empty list
+
     if len(points) == 2:
         bezier_points.append(points[0])
         bezier_points.append((2 * points[0] + points[1]) / 3)
@@ -53,21 +59,31 @@ def bezier_interpolation(points):
         bezier_points.append(points[1])
         return bezier_points
 
+    '''
     right_side_handles = [points[0] + 2 * points[1]]
     for p_index in range(1, len(points) - 2):
         right_side_handles.append(4 * points[p_index] + 2 * points[p_index + 1])
     right_side_handles.append(4 * points[-2] + points[-1] / 2) # or 8 * points[-2] + points[-1] wtf?
+    '''
 
-    first_control_points = [right_side_handles[0] / 2]
-    for p_index in range(1, len(right_side_handles) - 1):
-        pass
+    tmp_c = [2]
+    tmp_f = [points[0] + 2 * points[1]]
+    for p_index in range(1, len(points) - 1):
+        tmp_f.append(4 * points[p_index] - 2 * points[p_index + 1] - tmp_f[-1] / tmp_c[-1])
+        tmp_c.append(4 - 1 / tmp_c[-1])
+    tmp_f.append(8 * points[-2] + points[-1] - 2 * tmp_f[-1] / tmp_c[-1])
+    tmp_c.append(7 - 2 / tmp_c[-1])
+
+    first_control_points = [tmp_f[-1] / tmp_c[-1]]
+    for p_index in range(len(points) - 1, 0):
+        first_control_points.insert(0, (tmp_f[p_index] - first_control_points[0]) / tmp_c[p_index])
 
     for p_index in range(0, len(points) - 1):
-        bezier_points.append(points[p_index]) # P0
-        bezier_points.append(first_control_points[p_index]) # P1
-        bezier_points.append(2 * points[p_index + 1] - first_control_points[p_index + 1]) # P2
+        bezier_points.append(points[p_index])  # P0
+        bezier_points.append(first_control_points[p_index])  # P1
+        bezier_points.append(2 * points[p_index + 1] - first_control_points[p_index + 1])  # P2
 
-    bezier_points[-1] = 0.5 * (points[-1] + bezier_points[-2]) # P2 for last segment
+    bezier_points[-1] = 0.5 * (points[-1] + bezier_points[-2])  # P2 for last segment
     bezier_points.append(points[-1])
     return bezier_points
 
@@ -962,8 +978,13 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('@interface BF%s: BFObject <BFSurface>\n{\n' % kwargs['name'])
         file.write('\tNSMutableArray *m_splines;\n')
         file.write('\tGLKMatrix4 m_objectMatrix;\n')
+        # Данные анимации - массив массивов (для каждого сплайна) массивов (для каждой точки) сплайнов
+        actions = list(surface.animation_data.action)
+        for action in actions:
+            file.write('\tNSMutableArray m_%sData;\n' % action.name)
         file.write('}\n\n')
-        # Здесь методы, реализующие анимацию объекта
+
+        # Объявление методов, реализующих анимацию объекта
         actions = list(surface.animation_data.action)
         for nla_track in surface.animation_data.nla_tracks:
             file.write('\t-(void)%s:(float)t;' % nla_track.name)
@@ -1042,84 +1063,112 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         interpolation_point_count_array = []
         for action in actions:
+            file.write('\t\t[m_%sData = [NSMutableArray array];\n\n' % action.name)
             # (start_frame, end_frame) = action.frame_range
             key_frames = []
             for s_index, spline in enumerate(surface.splines):
-                for p_index, point in enumerate()
-                for frame in range(int(start_frame), int(end_frame) + 1):
+                splines_str = ''
+                list_of_points = []
+                for frame in key_frames:
                     context.scene.frame_set(frame)
-                    t = frame / (end_frame - start_frame)
                     if spline.type == 'BEZIER':
-                        list_of_bezier_points[t] = bezier_points_for_bezier_spline(spline)
+                        list_of_points.append(bezier_points_for_bezier_spline(spline))
 
+                    if spline.type == 'NURBS':
+                        list_of_points.append(bezier_points_for_NURB_spline(spline))
+
+                file.write('\t\t{\n')
+                point_count = point_count_array[s_index]
+                for p_index in range(point_count):
                     result_str = ''
-                    point_count_array.append(len(bezier_points))
-                    for i in range(len(bezier_points)):
-                        result_str += '\t\t\t' if i % 2 == 0 else ''
-                        result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in bezier_points[i]))
+                    spline_for_point = bezier_interpolation([point for frame_points in list_of_points for point in frame_points[p_index]])
+                    for i in range(point_count):
+                        result_str += '\t\t\t\t' if i % 2 == 0 else ''
+                        result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in spline_for_point[i]))
                         result_str += '\n' if i % 2 > 0 else ''
                     else:
                         result_str = result_str[:-2 if i % 2 == 0 else -3]
 
-                    file.write('\t\tBFPoint3D %s_spline_%d_point_%d_points[] = {\n%s\n\t\t};\n\n' % (action.name.lower(), s_index, p_index, result_str))
+                    file.write('\t\t\tBFPoint3D point%d_data[] = {\n%s\n\t\t\t};\n\n' % (p_index, result_str))
+                    splines_str += '[[BFSpline alloc] initWithPoints: point%d_data Count:%d Order:%d]' + ',\n\t\t\t' + ' ' * (44 + len(action.name)) % (p_index, len(spline_for_point), 4)
 
-        for action in actions:
-            file.write('\t\tNSMutableArray %s_data = {NSMutableArray array};\n\n' % action.name.lower())
-            for s_index, points_count in enumerate(interpolation_point_count_array):
-                file.write('\t\tNSMutableArray %s_data_for_spline_%d = {NSMutableArray array};\n\n' % (action.name.lower(), s_index))
-                for p_index, count in enumerate(points_count):
-                    file.write('\t\t[%s_data_for_spline_%d addObject: [[BFSpline alloc] initWithPoints: %s_spline_%d_point_%d_points Count:%d Order:3];\n' %
-                               (action.name.lower(), s_index, action.name.lower(), s_index, p_index, count))
-
-                file.write('\n\t\t[%s_data addObject: %s_data_for_spline_%d]' % action.name.lower(),  action.name.lower(), s_index)
-
+                file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s, nil]];\n\t\t}\n\n' % (action.name, splines_str))
 
         matrix = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][2])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][3]))
 
-        file.write('\n\t\t m_objectMatrix = GLKMatrix4Make(%s);\n\t}\n\n\treturn self;\n}\n\n' % matrix)
+        file.write('\n\t\t m_objectMatrix = GLKMatrix4Make(%s);\n'
+                   '\t}\n\n'
+                   '\treturn self;\n'
+                   '}\n\n' % matrix)
 
-        file.write('-(GLKMatrix4)getModelMatrix\n{\n\treturn m_objectMatrix;\n}\n\n')
-        file.write('-(BFVertex)getPointAt:(BFPointUV)point\n{\n\treturn [self getPointAt:point OnSpline:0];\n}\n\n')
+        file.write('-(GLKMatrix4)getModelMatrix\n'
+                   '{\n'
+                   '\treturn m_objectMatrix;\n'
+                   '}\n\n')
+        file.write('-(BFVertex)getPointAt:(BFPointUV)point\n'
+                   '{\n'
+                   '\treturn [self getPointAt:point OnSpline:0];\n'
+                   '}\n\n')
         file.write('-(BFVertex)getPointAt:(BFPointUV)point OnSpline:(int)spline\n'
-                   '{\n\treturn [(BFExtrudedSpline *)m_splines[spline] getPointAt:point];\n}\n\n')
+                   '{\n'
+                   '\treturn [(BFExtrudedSpline *)m_splines[spline] getPointAt:point];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithSegments:(int)count\n'
-                   '{\n\treturn [self getLineByPoints:points WithSegments:(int)count OnSpline:0];\n}\n\n')
+                   '{\n'
+                   '\treturn [self getLineByPoints:points WithSegments:(int)count OnSpline:0];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithMinAngle:(float)angle\n'
-                   '{\n\treturn [self getLineByPoints:points WithMinAngle:angle OnSpline:0];\n}\n\n')
+                   '{\n'
+                   '\treturn [self getLineByPoints:points WithMinAngle:angle OnSpline:0];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithSegments:(int)count\n'
-                   '{\n\treturn [self getSurfaceByPoints:points WithSegments:count OnSpline:0];\n}\n\n')
+                   '{\n'
+                   '\treturn [self getSurfaceByPoints:points WithSegments:count OnSpline:0];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithMinAngle:(float)angle\n'
-                   '{\n\treturn [self getSurfaceByPoints:points WithMinAngle:angle OnSpline:0];\n}\n\n')
+                   '{\n'
+                   '\treturn [self getSurfaceByPoints:points WithMinAngle:angle OnSpline:0];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
-                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithSegments:count];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n}\n\n')
+                   '{\n'
+                   '\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithSegments:count];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getLineByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
-                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithMinAngle:angle];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n}\n\n')
+                   '{\n'
+                   '\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getLineByPoints:points WithMinAngle:angle];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_LINE_STRIP Matrix:m_objectMatrix];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithSegments:(int)count OnSpline:(int)spline\n'
-                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithSegments:count];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')
+                   '{\n'
+                   '\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithSegments:count];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n'
+                   '}\n\n')
         file.write('-(BFObject<BFMesh> *)getSurfaceByPoints:(NSArray *)points WithMinAngle:(float)angle OnSpline:(int)spline\n'
-                   '{\n\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithMinAngle:angle];\n'
-                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n}\n\n')
+                   '{\n'
+                   '\tNSArray *data = [(BFExtrudedSpline *)m_splines[spline] getSurfaceByPoints:points WithMinAngle:angle];\n'
+                   '\treturn [[BFDefaultMesh alloc] initWithData:data GLPrimitive:GL_TRIANGLES Matrix:m_objectMatrix];\n'
+                   '}\n\n')
 
         for action in actions:
-            file.write('-(void)%s:(float)t\n{\n' % action.name)
-            file.write('\tNSInteger splineCount = [m_splines count];')
-            file.write('\tfor (int spline_index = 0; spline_index < splineCount; spline_index++)\n'
+            file.write('-(void)%s:(float)t\n'
+                       '{\n'
+                       '\tNSInteger splineCount = [m_splines count];'
+                       '\tfor (int spline_index = 0; spline_index < splineCount; spline_index++)\n'
                        '\t{\n'
                        '\t\tBFSpline spline = [m_splines objectAtIndex: spline_index];\n'
                        '\t\tNSInteger pointCount = [spline count];\n'
                        '\t\tfor (int point_index = 0; point_index < pointCount; point_index++)\n'
                        '\t\t{\n'
-                       '\t\t\tBFSpline *interpolation_spline = [[m_%s_data objectAtIndex:spline_index] objectAtIndex:point_index];\n'
+                       '\t\t\tBFSpline *interpolation_spline = [[m_%sData objectAtIndex:spline_index] objectAtIndex:point_index];\n'
                        '\t\t\tif (interpolation_spline)\n'
                        '\t\t\t\t*[[spline objectAtIndex:point_index] BFPoint3DRef] = [interpolation_spline getPointAt:t];\n'
                        '\t\t}\n'
-                       '\t}\n\n' % action.name)
+                       '\t}\n'
+                       '}\n\n' % (action.name, action.name))
 
         file.write('@end')
 
