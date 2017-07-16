@@ -75,10 +75,10 @@ def bezier_interpolation(points):
     tmp_c.append(7 - 2 / tmp_c[-1])
 
     first_control_points = [tmp_f[-1] / tmp_c[-1]]
-    for p_index in range(len(points) - 1, 0):
+    for p_index in range(len(points) - 1, 0, -1):
         first_control_points.insert(0, (tmp_f[p_index] - first_control_points[0]) / tmp_c[p_index])
 
-    for p_index in range(0, len(points) - 1):
+    for p_index in range(len(points) - 1):
         bezier_points.append(points[p_index])  # P0
         bezier_points.append(first_control_points[p_index])  # P1
         bezier_points.append(2 * points[p_index + 1] - first_control_points[p_index + 1])  # P2
@@ -480,9 +480,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     with open(os.path.join(dir_path, '%s.h' % obj.name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
                         object_file.write('#import "Math.h"\n\n')
                         if obj.data.extrude > 0:
-                            self.export_surface(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
+                            self.export_surface(context, obj.data, object_file, name=name_compact(obj.name), matrix_world=obj.matrix_world)
                         else:
-                            self.export_curve(obj.data, object_file, name=self.name_compact(obj.name), matrix_world=obj.matrix_world)
+                            self.export_curve(obj.data, object_file, name=name_compact(obj.name), matrix_world=obj.matrix_world)
                         #shutil.copyfile('Obj-C/Math.h', os.path.join(dir_path, 'Math.h'))
                         #shutil.copyfile('Obj-C/Math.cpp', os.path.join(dir_path, 'Math.cpp'))
 
@@ -832,7 +832,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('\tNSArray *m_splines;\n')
         file.write('\tGLKMatrix4 m_objectMatrix;\n')
         file.write('}\n\n')
-        action = curve.animation_data.action
+        action = curve.shape_keys.animation_data.action
         if action:
             file.write('\t-(void)%s:(float)t;' % action.name)
         file.write('@end\n\n')
@@ -979,19 +979,18 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('\tNSMutableArray *m_splines;\n')
         file.write('\tGLKMatrix4 m_objectMatrix;\n')
         # Данные анимации - массив массивов (для каждого сплайна) массивов (для каждой точки) сплайнов
-        actions = list(surface.animation_data.action)
+        actions = [surface.shape_keys.animation_data.action]
         for action in actions:
             file.write('\tNSMutableArray m_%sData;\n' % action.name)
         file.write('}\n\n')
 
         # Объявление методов, реализующих анимацию объекта
-        actions = list(surface.animation_data.action)
-        for nla_track in surface.animation_data.nla_tracks:
-            file.write('\t-(void)%s:(float)t;' % nla_track.name)
+        #for nla_track in surface.animation_data.nla_tracks:
+        #    file.write('\t-(void)%s:(float)t;' % nla_track.name)
 
         for action in actions:
-            file.write('\t-(void)%s:(float)t;' % action.name)
-        file.write('@end\n\n')
+            file.write('-(void)%s:(float)t;\n' % action.name)
+        file.write('\n@end\n\n')
 
         '''
          (start_frame, end_frame) = action.frame_range
@@ -1061,11 +1060,15 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                            '\t\t                              [[BFSpline alloc] initWithPoints: spline_%d_points Count:%d Order:%d] Extrude:%d]];\n' %
                            (index, point_count_array[index], 4, surface.extrude))
 
-        interpolation_point_count_array = []
         for action in actions:
-            file.write('\t\t[m_%sData = [NSMutableArray array];\n\n' % action.name)
+            file.write('\n\t\t[m_%sData = [NSMutableArray array];\n\n' % action.name)
             # (start_frame, end_frame) = action.frame_range
             key_frames = []
+            for fcurve in action.fcurves:
+                for key_frame in fcurve.keyframe_points:
+                    if key_frames.count(key_frame.co[0]) == 0:
+                        key_frames.append(key_frame.co[0])
+            key_frames.sort()
             for s_index, spline in enumerate(surface.splines):
                 splines_str = ''
                 list_of_points = []
@@ -1082,15 +1085,18 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 for p_index in range(point_count):
                     result_str = ''
                     spline_for_point = bezier_interpolation([point for frame_points in list_of_points for point in frame_points[p_index]])
-                    for i in range(point_count):
-                        result_str += '\t\t\t\t' if i % 2 == 0 else ''
-                        result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in spline_for_point[i]))
-                        result_str += '\n' if i % 2 > 0 else ''
-                    else:
-                        result_str = result_str[:-2 if i % 2 == 0 else -3]
+                    if spline_for_point:
+                        for i in range(point_count):
+                            result_str += '\t\t\t\t' if i % 2 == 0 else ''
+                            result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in spline_for_point[i]))
+                            result_str += '\n' if i % 2 > 0 else ''
+                        else:
+                            result_str = result_str[:-2 if i % 2 == 0 else -3]
 
-                    file.write('\t\t\tBFPoint3D point%d_data[] = {\n%s\n\t\t\t};\n\n' % (p_index, result_str))
-                    splines_str += '[[BFSpline alloc] initWithPoints: point%d_data Count:%d Order:%d]' + ',\n\t\t\t' + ' ' * (44 + len(action.name)) % (p_index, len(spline_for_point), 4)
+                        file.write('\t\t\tBFPoint3D point%d_data[] = {\n%s\n\t\t\t};\n\n' % (p_index, result_str))
+                        splines_str += '[[BFSpline alloc] initWithPoints: point%d_data Count:%d Order:%d],\n\t\t\t' + ' ' * (44 + len(action.name)) % (p_index, len(spline_for_point), 4)
+                    else:
+                        splines_str += '[NSNull null], \n\t\t\t' + ' ' * (44 + len(action.name))
 
                 file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s, nil]];\n\t\t}\n\n' % (action.name, splines_str))
 
