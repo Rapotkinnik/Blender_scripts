@@ -1038,7 +1038,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             bezier_points = []
             if spline.type == 'BEZIER':
                 bezier_points = bezier_points_for_bezier_spline(spline)
-
             # https://www.codeproject.com/Articles/996281/NURBS-curve-made-easy
             if spline.type == 'NURBS':
                 bezier_points = bezier_points_for_NURB_spline(spline)
@@ -1076,7 +1075,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     context.scene.frame_set(frame)
                     if spline.type == 'BEZIER':
                         list_of_points.append(bezier_points_for_bezier_spline(spline))
-
                     if spline.type == 'NURBS':
                         list_of_points.append(bezier_points_for_NURB_spline(spline))
 
@@ -1084,7 +1082,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 point_count = point_count_array[s_index]
                 for p_index in range(point_count):
                     result_str = ''
-                    spline_for_point = bezier_interpolation([point for frame_points in list_of_points for point in frame_points[p_index]])
+                    spline_for_point = bezier_interpolation([frame_points[p_index] for frame_points in list_of_points])
                     if spline_for_point:
                         for i in range(point_count):
                             result_str += '\t\t\t\t' if i % 2 == 0 else ''
@@ -1098,7 +1096,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     else:
                         splines_str += '[NSNull null], \n\t\t\t' + ' ' * (44 + len(action.name))
 
-                file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s, nil]];\n\t\t}\n\n' % (action.name, splines_str))
+                file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s nil]];\n\t\t}\n\n' % (action.name, splines_str))
 
         matrix = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
