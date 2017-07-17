@@ -993,41 +993,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         file.write('\tGLKMatrix4 m_objectMatrix;\n')
         file.write('\n@end\n\n')
 
-        '''
-         (start_frame, end_frame) = action.frame_range
-            for s_index, spline in enumerate(surface.splines):
-                list_of_bezier_points = {}
-                for frame in range(int(start_frame), int(end_frame) + 1):
-                    context.scene.frame_set(frame)
-                    t = frame / (end_frame - start_frame)
-                    if spline.type == 'BEZIER':
-                        list_of_bezier_points[t] = bezier_points_for_bezier_spline(spline)
-
-                for p_index in range(point_count_array[s_index]): # количество точек в сплайне
-                    str_for_x = string_interpolation(
-                        [(t, bezier_points[p_index][0]) for (t, bezier_points) in list_of_bezier_points.items()])
-                    str_for_y = string_interpolation(
-                        [(t, bezier_points[p_index][1]) for (t, bezier_points) in list_of_bezier_points.items()])
-                    str_for_z = string_interpolation(
-                        [(t, bezier_points[p_index][2]) for (t, bezier_points) in list_of_bezier_points.items()])
-
-                    if str_for_x:
-                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->x = %s;\n' % (s_index, p_index, str_for_x))
-                    if str_for_y:
-                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->y = %s;\n' % (s_index, p_index, str_for_y))
-                    if str_for_z:
-                        file.write('\t[[[m_spline[%d] spline] points][%d] BFPoint3DRef]->z = %s;\n' % (s_index, p_index, str_for_y))
-
-            file.write('\n}\n\n')
-
-        for nla_track in surface.animation_data.nla_tracks:
-            file.write('-(void)%s:(float)t\n{\n' % nla_track.name)
-            for nla_strip in nla_track.strips:
-                action = nla_strip.action  # |--action_1--|.......|--action_2--|
-            file.write('\n}\n\n')
-         '''
-
-
         file.write('@implementation BF%s\n\n' % kwargs['name'])
         file.write('-(id)init\n{\n'
                    '\tself = [super init];\n'
@@ -1052,12 +1017,12 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             else:
                 result_str = result_str[:-2 if i % 2 == 0 else -3]
 
-            file.write('\t\tBFPoint3D spline_%d_points[] = {\n%s\n\t\t};\n\n' % (index, result_str))
+            file.write('\t\tBFPoint3D spline%d_points[] = {\n%s\n\t\t};\n\n' % (index, result_str))
 
         for index, spline in enumerate(surface.splines):
             if spline.type == 'BEZIER':
                 file.write('\t\t[m_splines addObject: [[BFExtrudedSpline alloc] initWithSpline:\n'
-                           '\t\t                              [[BFSpline alloc] initWithPoints: spline_%d_points Count:%d Order:%d] Extrude:%d]];\n' %
+                           '\t\t                              [[BFSpline alloc] initWithPoints: spline%d_points Count:%d Order:%d] Extrude:%d]];\n' %
                            (index, point_count_array[index], 4, surface.extrude))
 
         for action in actions:
@@ -1072,12 +1037,32 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for s_index, spline in enumerate(surface.splines):
                 splines_str = ''
                 list_of_points = []
+                '''
                 for frame in key_frames:
                     context.scene.frame_set(frame)
                     if spline.type == 'BEZIER':
                         list_of_points.append(bezier_points_for_bezier_spline(spline))
                     if spline.type == 'NURBS':
                         list_of_points.append(bezier_points_for_NURB_spline(spline))
+                '''
+                for key in surface.shape_keys.key_blocks:
+                    if spline.type == 'BEZIER':
+                        bezier_points = []
+                        points = list(key.data)
+                        if spline.use_cyclic_u:
+                            points.append(spline.bezier_points[0])
+
+                        for i in range(len(points) - 1):
+                            bezier_points.append(points[i].co)
+                            bezier_points.append(points[i].handle_right)
+                            bezier_points.append(points[i + 1].handle_left)
+                        else:
+                            bezier_points.append(points[-1].co)  # has been i
+                        list_of_points.append(bezier_points)
+                    if spline.type == 'NURBS':
+                        list_of_points.append(bezier_points_for_NURB_spline(key.data))
+
+                print(list_of_points)
 
                 file.write('\t\t{\n')
                 point_count = point_count_array[s_index]
@@ -1085,7 +1070,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     result_str = ''
                     spline_for_point = bezier_interpolation([frame_points[p_index] for frame_points in list_of_points])
                     if spline_for_point:
-                        for i in range(point_count):
+                        for i in range(len(spline_for_point)):
                             result_str += '\t\t\t\t' if i % 2 == 0 else ''
                             result_str += '{%s}, ' % ', '.join(('%.6f' % co for co in spline_for_point[i]))
                             result_str += '\n' if i % 2 > 0 else ''
@@ -1093,7 +1078,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                             result_str = result_str[:-2 if i % 2 == 0 else -3]
 
                         file.write('\t\t\tBFPoint3D point%d_data[] = {\n%s\n\t\t\t};\n\n' % (p_index, result_str))
-                        splines_str += '[[BFSpline alloc] initWithPoints: point%d_data Count:%d Order:%d],\n\t\t\t' + ' ' * (44 + len(action.name)) % (p_index, len(spline_for_point), 4)
+                        splines_str += '[[BFSpline alloc] initWithPoints: point%d_data Count:%d Order:%d],\n\t\t\t' % (p_index, len(spline_for_point), 4)
+                        splines_str += ' ' * (44 + len(action.name))
                     else:
                         splines_str += '[NSNull null], \n\t\t\t' + ' ' * (44 + len(action.name))
 
