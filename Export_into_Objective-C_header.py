@@ -977,19 +977,20 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
     def export_surface(self, context, surface, file, **kwargs):
         file.write('@interface BF%s: BFObject <BFSurface>\n{\n' % kwargs['name'])
         file.write('\tNSMutableArray *m_splines;\n')
-        file.write('\tGLKMatrix4 m_objectMatrix;\n')
         # Данные анимации - массив массивов (для каждого сплайна) массивов (для каждой точки) сплайнов
         actions = [surface.shape_keys.animation_data.action]
-        for action in actions:
-            file.write('\tNSMutableArray m_%sData;\n' % action.name)
-        file.write('}\n\n')
+        for track in surface.shape_keys.animation_data.nla_tracks:
+            for strip in track.strips:
+                actions.append(strip.action)
 
-        # Объявление методов, реализующих анимацию объекта
-        #for nla_track in surface.animation_data.nla_tracks:
-        #    file.write('\t-(void)%s:(float)t;' % nla_track.name)
+        for action in actions:
+            file.write('\tNSMutableArray *m_%sData;\n' % action.name)
+        file.write('}\n\n')
 
         for action in actions:
             file.write('-(void)%s:(float)t;\n' % action.name)
+
+        file.write('\tGLKMatrix4 m_objectMatrix;\n')
         file.write('\n@end\n\n')
 
         '''
@@ -1096,7 +1097,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     else:
                         splines_str += '[NSNull null], \n\t\t\t' + ' ' * (44 + len(action.name))
 
-                file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s nil]];\n\t\t}\n\n' % (action.name, splines_str))
+                file.write('\t\t\t[m_%sData addObject:[NSArray arrayWithObjects:%s nil]];\n\t\t}\n' % (action.name, splines_str))
 
         matrix = ', '.join(('%.6f' % co for co in kwargs['matrix_world'][0])) + ',\n\t\t' + ' ' * 33
         matrix += ', '.join(('%.6f' % co for co in kwargs['matrix_world'][1])) + ',\n\t\t' + ' ' * 33
