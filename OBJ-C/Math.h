@@ -54,6 +54,19 @@ typedef BFPointUV * BFPointUVRef;
 typedef BFPoint3D * BFPoint3DRef;
 typedef BFVertex * BFVertexRef;
 
+typedef struct {
+    float ambient[3];
+    float diffuse[3];
+    float specular[3];
+    float shininess;
+} BFMaterial;
+
+typedef struct {
+    float ambient[3];
+    float diffuse[3];
+    float specular[3];
+} BFLightProperties;
+
 @interface BFValue : NSObject
 {
     void * m_data;
@@ -170,13 +183,20 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 -(GLKMatrix4)getModelMatrix;
 @end
 
+// Источник света
+@protocol BFLighting
+- (BFPoint3D)        getPosition;
+- (BFLigthProperies) getLigthProperies;
+@end
+
 // Меш
 @protocol BFMesh
-- (GLuint)      getGLPrimitive;
-- (GLuint)      getDataCount;
-- (GLuint)      getIndicesCount;
-- (GLuint *)    getIndices;
+- (GLuint)     getGLPrimitive;
+- (GLuint)     getDataCount;
+- (GLuint)     getIndicesCount;
+- (GLuint *)   getIndices;
 - (BFVertex *) getData;
+- (BFMaterial) getMaterial;
 @end
 
 // Кривая
@@ -269,7 +289,7 @@ typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 
 @end
 
-@interface BFDefaultMesh : BFObject <BFMesh>
+@interface BFDefaultMesh : BFObtject <BFMesh>
 
 -(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
 -(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
