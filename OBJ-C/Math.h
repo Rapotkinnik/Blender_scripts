@@ -1,3 +1,10 @@
+//
+//  Math.h
+//  Snowflackes
+//
+//  Created by Рапоткин Никалай on 23.08.2017.
+//
+
 #import <GLKit/GLKit.h>
 
 typedef struct

@@ -270,22 +270,22 @@ static const float MACHINE_EPSILON = 2e-54;
 
 float LinearBezierCurve1D(const float values[2], float t)
 {
-    return (1 - t) * values[0].x + t * values[1].x;
+    return (1 - t) * values[0] + t * values[1];
 }
 
 float QuadraticBezierCurve1D(const float values[3], float t)
 {
-    return pow(1 - t, 2) * values[0].x + 2 * t * (1 - t) * values[1].x + t * t * values[2].x;
+    return pow(1 - t, 2) * values[0] + 2 * t * (1 - t) * values[1] + t * t * values[2];
 }
 
 float CubicBezierCurve1D(const float values[4], float t)
 {
-    return pow(1 - t, 3) * values[0].x + 3 * pow(1 - t, 2) * t * values[1].x + 3 * (1 - t) * t * t * values[2].x + pow(t, 3) * values[3].x;
+    return pow(1 - t, 3) * values[0] + 3 * pow(1 - t, 2) * t * values[1] + 3 * (1 - t) * t * t * values[2] + pow(t, 3) * values[3];
 }
 
 float QuadricBezierCurve1D(const float values[5], float t)
 {
-    return pow(1 - t, 4) * values[0].x + 4 * pow(1 - t, 3) * t * values[1].x + 6 * pow(1 - t, 2) * t * t * values[2].x + 4 * pow(t, 3) * (1 - t) * values[3].x + pow(t, 4) * values[4].x;
+    return pow(1 - t, 4) * values[0] + 4 * pow(1 - t, 3) * t * values[1] + 6 * pow(1 - t, 2) * t * t * values[2] + 4 * pow(t, 3) * (1 - t) * values[3] + pow(t, 4) * values[4];
 }
 
 float QuinticBezierCurve1D(const float values[6], float t)
@@ -303,15 +303,15 @@ float getPointOnCurve(const float *values, int size, int order, const float t)
 
     switch (order) {
         case 2:
-            return LinearBezierCurve1D(points + segment * degree, segment_t);
+            return LinearBezierCurve1D(values + segment * degree, segment_t);
         case 3:
-            return QuadraticBezierCurve1D(points + segment * degree, segment_t);
+            return QuadraticBezierCurve1D(values + segment * degree, segment_t);
         case 4:
-            return CubicBezierCurve1D(points + segment * degree, segment_t);
+            return CubicBezierCurve1D(values + segment * degree, segment_t);
         case 5:
-            return QuadricBezierCurve1D(points + segment * degree, segment_t);
+            return QuadricBezierCurve1D(values + segment * degree, segment_t);
         case 6:
-            return QuinticBezierCurve1D(points + segment * degree, segment_t);
+            return QuinticBezierCurve1D(values + segment * degree, segment_t);
         default:
             break;
     }
