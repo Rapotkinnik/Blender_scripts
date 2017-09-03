@@ -1062,8 +1062,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                     if spline.type == 'NURBS':
                         list_of_points.append(bezier_points_for_NURB_spline(key.data))
 
-                print(list_of_points)
-
                 file.write('\t\t{\n')
                 point_count = point_count_array[s_index]
                 for p_index in range(point_count):
