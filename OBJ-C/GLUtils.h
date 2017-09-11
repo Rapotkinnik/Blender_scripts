@@ -8,24 +8,6 @@
 #import <GLKit/GLKit.h>
 #import <Foundation/Foundation.h>
 
-//// Uniform index.
-//enum
-//{
-//    UNIFORM_MODELVIEWPROJECTION_MATRIX,
-//    UNIFORM_NORMAL_MATRIX,
-//    NUM_UNIFORMS
-//};
-//
-//// Attribute index.
-//enum
-//{
-//    ATTRIB_VERTEX,
-//    ATTRIB_COLOR,
-//    ATTRIB_NORMAL,
-//    ATTRIB_TEX_CO,
-//    NUM_ATTRIBUTES
-//};
-
 @class BFGLProgram;
 
 typedef void(BFGLFunction)(BFGLProgram *program);
@@ -38,7 +20,21 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 -(void)cleanup;
 -(void)beforeDraw;
 -(void)afterDraw;
--(void)draw;
+//-(void)draw;
+
+@end
+
+@interface BFGLColorCleaner : NSObject <BFGLCustomizer>
+{
+    CIColor *m_color;
+    GLbitfield m_mask;
+}
+
+-(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask;
++(instancetype)colorCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask;
+
+@property (nonatomic, readwrite) CIColor *color;
+@property (nonatomic, readwrite) GLbitfield mask;
 
 @end
 
@@ -48,6 +44,9 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
     GLuint m_texture;
     GLuint m_selfTexture;
     GLuint m_framebuffer;
+    
+    GLint  m_lastTextre;
+    GLint  m_lastFramebuffer;
     GLint  m_lastViewPort[4];
 
     GLvoid *m_buffer;
@@ -81,10 +80,8 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
     NSMutableDictionary *m_uniforms;
 }
 
-@property (readonly) GLuint program;
-@property (readonly) NSArray *customizers;
-@property (readonly) NSDictionary *attribs;
-@property (readonly) NSDictionary *uniforms;
+@property (nonatomic, readonly) GLuint program;
+@property (nonatomic, readonly) NSArray *customizers;
 
 -(instancetype)initWithVertexShader:(NSString *)vertShader FragmentShader:(NSString *)fragShader Customizers:(NSArray *) customizers;
 -(instancetype)initWithVertexShaderPath:(NSString *)vertShaderPath FragmentShaderPath:(NSString *)fragShaderPath Customizers:(NSArray *) customizers;
@@ -95,6 +92,9 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 
 -(void)addCustomizer:(NSObject<BFGLCustomizer> *)customizer;
 -(void)removeCustomizer:(NSObject<BFGLCustomizer> *)customizer;
--(void)draw:(BFGLFunctor)functor;
+-(void)drawFunctor:(BFGLFunctor)functor;
+-(void)drawFunctors:(NSArray *)functors;
+-(GLint)attribute:(NSString *)name;
+-(GLint)uniform:(NSString *)name;
 
 @end  // BFGLProgram

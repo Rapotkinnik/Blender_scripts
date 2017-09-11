@@ -7,6 +7,39 @@
 
 #import "GLUtils.h"
 
+@implementation BFGLColorCleaner
+
+-(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask
+{
+    self = [super init];
+    if (self)
+    {
+        m_color = color;
+        m_mask = mask;
+    }
+    
+    return self;
+}
+
++(instancetype)colorCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask
+{
+    return [[[self class] alloc] initWithColor:(CIColor *)color Mask:(GLbitfield)mask];
+}
+
+-(void)setProgram:(BFGLProgram *)programm {}
+-(void)preparation {}
+-(void)cleanup {}
+-(void)afterDraw {}
+-(void)beforeDraw
+{
+    glClearColor([m_color red], [m_color green], [m_color blue], [m_color alpha]);
+    glClear(m_mask);
+}
+
+@synthesize color = m_color, mask = m_mask;
+
+@end
+
 @implementation BFGLToTextureDrawer
 
 -(instancetype)initWithView:(CGRect)view
@@ -27,10 +60,16 @@
         m_view = view;
         m_buffer = NULL;
         
+        GLenum error = glGetError();
+        
         glGenTextures(1, &m_selfTexture);
         glGenFramebuffers(1, &m_framebuffer);
         
+        error = glGetError();
+        
         [self setTexture:m_selfTexture];
+        
+        error = glGetError();
     }
     
     return self;
@@ -53,7 +92,7 @@
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_view.size.width, m_view.size.height, 0, GL_RGB, GL_UNSIGNED_SHORT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_view.size.width, m_view.size.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -90,6 +129,8 @@
 
 -(void)beforeDraw
 {
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_lastTextre);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_lastFramebuffer);
     glGetIntegerv(GL_VIEWPORT, m_lastViewPort);
     glViewport(m_view.origin.x, m_view.origin.y,
                m_view.size.width, m_view.size.height);
@@ -103,17 +144,13 @@
     if (m_buffer)
         glReadPixels(m_view.origin.x, m_view.origin.y,
                      m_view.size.width, m_view.size.height,
-                     GL_RGB, GL_UNSIGNED_SHORT, m_buffer);
+                     GL_RGB, GL_UNSIGNED_SHORT_5_6_5, m_buffer);
     
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, m_lastTextre);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_lastFramebuffer);
     
     glViewport(m_lastViewPort[0], m_lastViewPort[1],
                m_lastViewPort[2], m_lastViewPort[3]);
-}
-
--(void)draw
-{
 }
 
 @synthesize view = m_view, texture = m_texture;
@@ -315,7 +352,7 @@
     [m_customizers removeObject:customizer];
 }
 
--(void)draw:(BFGLFunctor)functor
+-(void)drawFunctor:(BFGLFunctor)functor
 {
     glUseProgram(m_program);
     
@@ -326,12 +363,71 @@
         functor(self);
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
-        [customizer draw];
+        [customizer afterDraw];
+    
+    NSNumber *value;
+    NSEnumerator *attribEnumerator = [m_attribs objectEnumerator];
+    while(value = [attribEnumerator nextObject])
+        glDisableVertexAttribArray([value integerValue]);
+
+    glUseProgram(0);
+}
+
+-(void)drawFunctors:(NSArray *)functors
+{
+    GLenum error = glGetError();
+    
+    glUseProgram(m_program);
+    
+    error = glGetError();
+    
+    for (NSObject<BFGLCustomizer> *customizer in m_customizers)
+        [customizer beforeDraw];
+    
+    error = glGetError();
+    
+    for (BFGLFunctor functor in functors)
+        functor(self);
+    
+    error = glGetError();
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
         [customizer afterDraw];
     
+    error = glGetError();
+    
+    NSNumber *value;
+    NSEnumerator *attribEnumerator = [m_attribs objectEnumerator];
+    while(value = [attribEnumerator nextObject])
+        glDisableVertexAttribArray([value integerValue]);
+    
+    error = glGetError();
+    
     glUseProgram(0);
+    
+    error = glGetError();
+}
+
+-(GLint)attribute:(NSString *)name
+{
+    NSNumber *value = [m_attribs objectForKey:name];
+    if (value)
+        return (GLint)[value integerValue];
+    
+    @throw [NSException exceptionWithName:@"NotExistAttributeException"
+                                   reason:[NSString stringWithFormat:@"There is no attribute with the name \"%@\"", name]
+                                 userInfo:nil];
+}
+
+-(GLint)uniform:(NSString *)name
+{
+    NSNumber *value = [m_uniforms objectForKey:name];
+    if (value)
+        return (GLint)[value integerValue];
+    
+    @throw [NSException exceptionWithName:@"NotExistUniformException"
+                                   reason:[NSString stringWithFormat:@"There is no uniform with the name \"%@\"", name]
+                                 userInfo:nil];
 }
 
 -(BOOL)compileShader:(GLuint *)shaderID WithType:(GLenum)type WithSource:(NSString *)shader
@@ -408,6 +504,6 @@
     return YES;
 }
 
-@synthesize program = m_program, customizers = m_customizers, attribs = m_attribs, uniforms = m_uniforms;
+@synthesize program = m_program, customizers = m_customizers;
 
 @end  // BFGLProgram

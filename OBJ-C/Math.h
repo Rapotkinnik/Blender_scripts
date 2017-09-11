@@ -193,7 +193,7 @@ NSArray *BFTriangulateWithGetPointUVFunc(NSArray *poly, BFGetPointUVFromValue bl
 // Источник света
 @protocol BFLighting
 - (BFPoint3D)        getPosition;
-- (BFLigthProperies) getLigthProperies;
+//- (BFLigthProperies) getLigthProperies;
 @end
 
 // Меш
@@ -296,7 +296,7 @@ typedef void(^BFPerPointBlock)(BFPoint3D *point, float t);
 
 @end
 
-@interface BFDefaultMesh : BFObtject <BFMesh>
+@interface BFDefaultMesh : BFObject <BFMesh>
 
 -(id)initWithData:(NSArray *)data GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
 -(id)initWithData:(NSArray *)data Indices:(NSArray *)indices GLPrimitive:(GLuint)primitive Matrix:(GLKMatrix4)matrix;
