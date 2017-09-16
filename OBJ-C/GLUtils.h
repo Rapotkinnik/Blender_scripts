@@ -13,6 +13,14 @@
 typedef void(BFGLFunction)(BFGLProgram *program);
 typedef void(^BFGLFunctor)(BFGLProgram *program);
 
+@protocol BFGLDrawable <NSObject>
+
+-(void)beforeDraw:(BFGLProgram *)program;
+-(void)afterDraw:(BFGLProgram *)program;
+-(void)draw:(BFGLProgram *)program;
+
+@end
+
 @protocol BFGLCustomizer <NSObject>
 
 -(void)setProgram:(BFGLProgram *)programm;
@@ -20,21 +28,6 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 -(void)cleanup;
 -(void)beforeDraw;
 -(void)afterDraw;
-//-(void)draw;
-
-@end
-
-@interface BFGLColorCleaner : NSObject <BFGLCustomizer>
-{
-    CIColor *m_color;
-    GLbitfield m_mask;
-}
-
--(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask;
-+(instancetype)colorCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask;
-
-@property (nonatomic, readwrite) CIColor *color;
-@property (nonatomic, readwrite) GLbitfield mask;
 
 @end
 
@@ -50,7 +43,7 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
     GLint  m_lastViewPort[4];
 
     GLvoid *m_buffer;
-    BFGLProgram *m_programm;
+    BFGLProgram *m_program;
 }
 
 @property (nonatomic, readonly) CGRect view;
@@ -68,6 +61,20 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
     
 }
 
+@end
+
+@interface BFGLBuffCleaner : NSObject <BFGLDrawable>
+{
+    CIColor *m_color;
+    GLbitfield m_mask;
+}
+
+-(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask;
++(instancetype)buffCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask;
+    
+@property (nonatomic, readwrite) CIColor *color;
+@property (nonatomic, readwrite) GLbitfield mask;
+    
 @end
 
 @interface BFGLProgram : NSObject
@@ -94,6 +101,7 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 -(void)removeCustomizer:(NSObject<BFGLCustomizer> *)customizer;
 -(void)drawFunctor:(BFGLFunctor)functor;
 -(void)drawFunctors:(NSArray *)functors;
+-(void)drawObjects:(NSArray *)objects;
 -(GLint)attribute:(NSString *)name;
 -(GLint)uniform:(NSString *)name;
 

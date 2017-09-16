@@ -7,39 +7,6 @@
 
 #import "GLUtils.h"
 
-@implementation BFGLColorCleaner
-
--(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask
-{
-    self = [super init];
-    if (self)
-    {
-        m_color = color;
-        m_mask = mask;
-    }
-    
-    return self;
-}
-
-+(instancetype)colorCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask
-{
-    return [[[self class] alloc] initWithColor:(CIColor *)color Mask:(GLbitfield)mask];
-}
-
--(void)setProgram:(BFGLProgram *)programm {}
--(void)preparation {}
--(void)cleanup {}
--(void)afterDraw {}
--(void)beforeDraw
-{
-    glClearColor([m_color red], [m_color green], [m_color blue], [m_color alpha]);
-    glClear(m_mask);
-}
-
-@synthesize color = m_color, mask = m_mask;
-
-@end
-
 @implementation BFGLToTextureDrawer
 
 -(instancetype)initWithView:(CGRect)view
@@ -113,7 +80,7 @@
 
 -(void)setProgram:(BFGLProgram *)programm
 {
-    m_programm = programm;
+    m_program = programm;
 }
 
 -(void)preparation
@@ -155,7 +122,38 @@
 
 @synthesize view = m_view, texture = m_texture;
 
-@end
+@end  // BFGLToTextureDrawer
+
+@implementation BFGLBuffCleaner
+
+-(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask
+{
+    self = [super init];
+    if (self)
+    {
+        m_color = color;
+        m_mask = mask;
+    }
+    
+    return self;
+}
+
++(instancetype)buffCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask
+{
+    return [[[self class] alloc] initWithColor:(CIColor *)color Mask:(GLbitfield)mask];
+}
+
+-(void)afterDraw:(BFGLProgram *)program {}
+-(void)beforeDraw:(BFGLProgram *)program {}
+-(void)draw:(BFGLProgram *)program
+{
+    glClearColor([m_color red], [m_color green], [m_color blue], [m_color alpha]);
+    glClear(m_mask);
+}
+
+@synthesize color = m_color, mask = m_mask;
+
+@end  // BFGLBuffCleaner
 
 @implementation BFGLProgram
 
@@ -186,13 +184,13 @@
         {
             if ([line hasPrefix:@"attribute"])
             {
-                NSString *attribName = [[line componentsSeparatedByString:@" "] objectAtIndex:2];
+                NSString *attribName = [[line componentsSeparatedByString:@" "] lastObject];
                 [m_attribs setObject:[NSNull null] forKey:[attribName substringToIndex:[attribName length] - 1]];
             }
             
             if ([line hasPrefix:@"uniform"])
             {
-                NSString *uniformName = [[line componentsSeparatedByString:@" "] objectAtIndex:2];
+                NSString *uniformName = [[line componentsSeparatedByString:@" "] lastObject];
                 [m_uniforms setObject:[NSNull null] forKey:[uniformName substringToIndex:[uniformName length] - 1]];
             }
         }
@@ -202,7 +200,7 @@
         {
             if ([line hasPrefix:@"uniform"])
             {
-                NSString *uniformName = [[line componentsSeparatedByString:@" "] objectAtIndex:2];
+                NSString *uniformName = [[line componentsSeparatedByString:@" "] lastObject];
                 [m_uniforms setObject:[NSNull null] forKey:[uniformName substringToIndex:[uniformName length] - 1]];
             }
         }
@@ -375,37 +373,50 @@
 
 -(void)drawFunctors:(NSArray *)functors
 {
-    GLenum error = glGetError();
-    
     glUseProgram(m_program);
-    
-    error = glGetError();
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
         [customizer beforeDraw];
     
-    error = glGetError();
-    
     for (BFGLFunctor functor in functors)
         functor(self);
     
-    error = glGetError();
-    
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
         [customizer afterDraw];
-    
-    error = glGetError();
     
     NSNumber *value;
     NSEnumerator *attribEnumerator = [m_attribs objectEnumerator];
     while(value = [attribEnumerator nextObject])
         glDisableVertexAttribArray([value integerValue]);
     
-    error = glGetError();
+    glUseProgram(0);
+}
+
+-(void)drawObjects:(NSArray *)objects
+{
+    glUseProgram(m_program);
+    
+    for (NSObject<BFGLCustomizer> *customizer in m_customizers)
+        [customizer beforeDraw];
+    
+    for (NSObject<BFGLDrawable> *object in objects)
+        [object beforeDraw:self];
+    
+    for (NSObject<BFGLDrawable> *object in objects)
+        [object draw:self];
+    
+    for (NSObject<BFGLDrawable> *object in objects)
+        [object afterDraw:self];
+    
+    for (NSObject<BFGLCustomizer> *customizer in m_customizers)
+        [customizer afterDraw];
+    
+    NSNumber *value;
+    NSEnumerator *attribEnumerator = [m_attribs objectEnumerator];
+    while(value = [attribEnumerator nextObject])
+        glDisableVertexAttribArray([value integerValue]);
     
     glUseProgram(0);
-    
-    error = glGetError();
 }
 
 -(GLint)attribute:(NSString *)name
