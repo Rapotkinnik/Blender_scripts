@@ -176,33 +176,34 @@
                                                reason:@"Customizer doesn't conform protocol BFGLCustomizer"
                                              userInfo:nil];
             }
-                
+        
+        NSError *error = nil;
+        NSString *mainPattern = @"void\\s+main\\s*\(\\s*\)";
+        NSString *attribPattern = @"(?<=attribute\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
+        NSString *uniformPattern = @"(?<=uniform\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
+        NSRegularExpression *mainRegExpr = [NSRegularExpression regularExpressionWithPattern:mainPattern options:0 error:&error];
+        NSRegularExpression *attribRegExpr = [NSRegularExpression regularExpressionWithPattern:attribPattern options:0 error:&error];
+        NSRegularExpression *uniformRegExpr = [NSRegularExpression regularExpressionWithPattern:uniformPattern options:0 error:&error];
         
         NSString *line = nil;
+        NSTextCheckingResult *match;
         NSEnumerator   *vertexShaderEnumerator = [[vertShader componentsSeparatedByString:@"\n"] objectEnumerator];
-        while ((line = [vertexShaderEnumerator nextObject]) && ![line isEqual: @"void main()"])
+        while ((line = [vertexShaderEnumerator nextObject]) &&
+              !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
         {
-            if ([line hasPrefix:@"attribute"])
-            {
-                NSString *attribName = [[line componentsSeparatedByString:@" "] lastObject];
-                [m_attribs setObject:[NSNull null] forKey:[attribName substringToIndex:[attribName length] - 1]];
-            }
+            if ((match = [attribRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+                [m_attribs setObject:[NSNull null] forKey:[line substringWithRange:[match range]]];
             
-            if ([line hasPrefix:@"uniform"])
-            {
-                NSString *uniformName = [[line componentsSeparatedByString:@" "] lastObject];
-                [m_uniforms setObject:[NSNull null] forKey:[uniformName substringToIndex:[uniformName length] - 1]];
-            }
+            if ((match = [uniformRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+                [m_uniforms setObject:[NSNull null] forKey:[line substringWithRange:[match range]]];
         }
 
         NSEnumerator   *fragmentShaderEnumerator = [[fragShader componentsSeparatedByString:@"\n"] objectEnumerator];
-        while ((line = [fragmentShaderEnumerator nextObject]) && ![line isEqual: @"void main()"])
+        while ((line = [fragmentShaderEnumerator nextObject]) &&
+               !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
         {
-            if ([line hasPrefix:@"uniform"])
-            {
-                NSString *uniformName = [[line componentsSeparatedByString:@" "] lastObject];
-                [m_uniforms setObject:[NSNull null] forKey:[uniformName substringToIndex:[uniformName length] - 1]];
-            }
+            if ((match = [uniformRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+                [m_uniforms setObject:[NSNull null] forKey:[line substringWithRange:[match range]]];
         }
         
         
