@@ -179,8 +179,8 @@
         
         NSError *error = nil;
         NSString *mainPattern = @"void\\s+main\\s*\(\\s*\)";
-        NSString *attribPattern = @"(?<=attribute\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
-        NSString *uniformPattern = @"(?<=uniform\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
+        NSString *attribPattern = @"(?<=attribute\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|mat2|mat3|mat4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
+        NSString *uniformPattern = @"(?<=uniform\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|mat2|mat3|mat4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
         NSRegularExpression *mainRegExpr = [NSRegularExpression regularExpressionWithPattern:mainPattern options:0 error:&error];
         NSRegularExpression *attribRegExpr = [NSRegularExpression regularExpressionWithPattern:attribPattern options:0 error:&error];
         NSRegularExpression *uniformRegExpr = [NSRegularExpression regularExpressionWithPattern:uniformPattern options:0 error:&error];
@@ -353,13 +353,15 @@
 
 -(void)drawFunctor:(BFGLFunctor)functor
 {
+    GLint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    
     glUseProgram(m_program);
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
         [customizer beforeDraw];
     
-    if (functor)
-        functor(self);
+    functor(self);
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
         [customizer afterDraw];
@@ -369,11 +371,14 @@
     while(value = [attribEnumerator nextObject])
         glDisableVertexAttribArray([value integerValue]);
 
-    glUseProgram(0);
+    glUseProgram(prev_program);
 }
 
 -(void)drawFunctors:(NSArray *)functors
 {
+    GLint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    
     glUseProgram(m_program);
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
@@ -390,11 +395,14 @@
     while(value = [attribEnumerator nextObject])
         glDisableVertexAttribArray([value integerValue]);
     
-    glUseProgram(0);
+    glUseProgram(prev_program);
 }
 
 -(void)drawObjects:(NSArray *)objects
 {
+    GLint prev_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_program);
+    
     glUseProgram(m_program);
     
     for (NSObject<BFGLCustomizer> *customizer in m_customizers)
@@ -417,7 +425,7 @@
     while(value = [attribEnumerator nextObject])
         glDisableVertexAttribArray([value integerValue]);
     
-    glUseProgram(0);
+    glUseProgram(prev_program);
 }
 
 -(GLint)attribute:(NSString *)name

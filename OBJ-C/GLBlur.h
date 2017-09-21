@@ -22,7 +22,6 @@ typedef struct {
     GLint m_blurAmountIndex;
     GLint m_screemTextureIndex;
     
-    BFGLProgram *m_program;
     BFGLProgram *m_blurProgram;
 }
 
