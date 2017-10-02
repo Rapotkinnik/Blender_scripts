@@ -41,14 +41,14 @@ typedef struct
     float alpha;
 } BFColorRGBA;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
     BFPoint3D    coord;
     BFPoint3D    normal;
     BFPointUV    textureCoord;
 } BFVertex;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
     BFPoint3D    coord;
     BFColorRGBA  color;
@@ -61,18 +61,21 @@ typedef BFPointUV * BFPointUVRef;
 typedef BFPoint3D * BFPoint3DRef;
 typedef BFVertex * BFVertexRef;
 
-typedef struct {
-    float ambient[3];
-    float diffuse[3];
-    float specular[3];
+typedef struct __attribute__((packed))
+{
+    BFColorRGB ambient;
+    BFColorRGB diffuse;
+    BFColorRGB specular;
     float shininess;
 } BFMaterial;
 
-typedef struct {
-    float ambient[3];
-    float diffuse[3];
-    float specular[3];
-} BFLightProperties;
+typedef struct __attribute__((packed))
+{
+    BFPoint3D position;
+    BFColorRGB ambient;
+    BFColorRGB diffuse;
+    BFColorRGB specular;
+} BFLight;
 
 @interface BFValue : NSObject
 {

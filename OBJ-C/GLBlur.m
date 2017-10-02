@@ -20,28 +20,28 @@ NSString *kVertexShader = @""
 
 NSString *kFragmentShader = @""
 "uniform sampler2D screenTexture;  // offscreen texture, witch was created on previous render step\n"
-"uniform mediump vec2 blurAmount;  // Amount of blur at x, y\n"
+"uniform lowp vec2 blurAmount;     // Amount of blur at x, y\n"
 "\n"
 "varying lowp vec2 outTexCoord;\n"
 "\n"
 "lowp float blurSizeH = blurAmount.x / 300.0;\n"
-"lowp float blurSizeV = blurAmount.y / 200.0;\n"
+"lowp float blurSizeV = blurAmount.y / 300.0;\n"
 "\n"
 "void main()\n"
 "{\n"
 "    lowp vec4 sum = vec4(0.0);\n"
-"    for (int x = -4; x <= 4; x = x + 2)\n"
-"        for (int y = -4; y <= 4; y = y + 2)\n"
+"    for (int x = -4; x <= 4; x++)\n"
+"        for (int y = -4; y <= 4; y++)\n"
 "            sum += texture2D(screenTexture,\n"
 "                             vec2(outTexCoord.x + float(x) * blurSizeH,\n"
-"                                  outTexCoord.y + float(y) * blurSizeV)) / 16.0;\n"
+"                                  outTexCoord.y + float(y) * blurSizeV)) / 81.0;\n"
 "    gl_FragColor = sum;\n"
 "}";
 
 const GLfloat kFigure[] = {-1.0, -1.0, 0.0, 0.0,
-                           -1.0,  1.0, 1.0, 0.0,
+                           -1.0,  1.0, 0.0, 1.0,
                             1.0,  1.0, 1.0, 1.0,
-                            1.0, -1.0, 0.0, 1.0};
+                            1.0, -1.0, 1.0, 0.0};
 
 const GLubyte kIndices[] = {0, 1, 2, 2, 3, 0};
 
@@ -99,30 +99,31 @@ const GLubyte kIndices[] = {0, 1, 2, 2, 3, 0};
 
 -(void)afterDraw
 {
-    [m_blurProgram drawFunctor:^(BFGLProgram *program) {
-        glClearColor(0.7, 0.7, 0.7, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    if (m_blurAmount.horizontal || m_blurAmount.vertical)
+        [m_blurProgram drawFunctor:^(BFGLProgram *program) {
+            glClearColor(0.7, 0.7, 0.7, 1.0);
+            glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
         
-        glEnableVertexAttribArray(m_positionIndex);
-        glEnableVertexAttribArray(m_texCoordIndex);
+            glEnableVertexAttribArray(m_positionIndex);
+            glEnableVertexAttribArray(m_texCoordIndex);
 
-        GLint prevTexture;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexture);
+            GLint prevTexture;
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexture);
 
-        glBindTexture(GL_TEXTURE_2D, m_texture);
+            glBindTexture(GL_TEXTURE_2D, m_texture);
 
-        glUniform1i(m_screemTextureIndex, 0);
-        glUniform2f(m_blurAmountIndex, m_blurAmount.horizontal, m_blurAmount.vertical);
+            glUniform1i(m_screemTextureIndex, 0);
+            glUniform2f(m_blurAmountIndex, m_blurAmount.horizontal, m_blurAmount.vertical);
+            
+            glVertexAttribPointer(m_positionIndex, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), kFigure);
+            glVertexAttribPointer(m_texCoordIndex, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), &kFigure[2]);
 
-        glVertexAttribPointer(m_positionIndex, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), kFigure);
-        glVertexAttribPointer(m_texCoordIndex, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), &kFigure[2]);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, kIndices);
 
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, kIndices);
-
-        glBindTexture(GL_TEXTURE_2D, prevTexture);
-        glDisableVertexAttribArray(m_positionIndex);
-        glDisableVertexAttribArray(m_texCoordIndex);
-    }];
+            glBindTexture(GL_TEXTURE_2D, prevTexture);
+            glDisableVertexAttribArray(m_positionIndex);
+            glDisableVertexAttribArray(m_texCoordIndex);
+        }];
 }
 
 -(void)setProgram:(BFGLProgram *)programm {}

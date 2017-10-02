@@ -8,8 +8,8 @@
 #import "GLUtils.h"
 
 typedef struct {
-    GLfloat vertical;
     GLfloat horizontal;
+    GLfloat vertical;
 } BlureAmount;
 
 @interface BFGLBlur : NSObject <BFGLCustomizer>
