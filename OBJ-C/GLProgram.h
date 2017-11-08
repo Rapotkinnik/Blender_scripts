@@ -10,7 +10,6 @@
 
 @class BFGLProgram;
 
-typedef void(BFGLFunction)(BFGLProgram *program);
 typedef void(^BFGLFunctor)(BFGLProgram *program);
 
 @protocol BFGLDrawable <NSObject>
@@ -31,24 +30,13 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 
 @end
 
-@interface BFGLVBODrawer : NSObject <BFGLCustomizer>
+@interface BFGLFunctorWrapper : NSObject <BFGLDrawable>
 {
-    
+    BFGLFunctor m_functor;
 }
 
-@end
-
-@interface BFGLBuffCleaner : NSObject <BFGLDrawable>
-{
-    CIColor *m_color;
-    GLbitfield m_mask;
-}
-
--(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask;
-+(instancetype)buffCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask;
-    
-@property (nonatomic, readwrite) CIColor *color;
-@property (nonatomic, readwrite) GLbitfield mask;
+-(instancetype)initWithFunctor:(BFGLFunctor)functor;
++(instancetype)functorWrapperWithFunctor:(BFGLFunctor)functor;
     
 @end
 

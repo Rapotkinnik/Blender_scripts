@@ -5,155 +5,36 @@
 //  Created by Рапоткин Никалай on 11.09.14.
 //
 
-#import "GLUtils.h"
+#import "GLProgram.h"
 
-@implementation BFGLToTextureDrawer
+const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|2D|Cube)";
 
--(instancetype)initWithView:(CGRect)view
+@implementation BFGLFunctorWrapper
+
+-(instancetype)initWithFunctor:(BFGLFunctor)functor
 {
     self = [super init];
     if (self)
     {
-        GLint maxRenderbufferSize;
-        glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &maxRenderbufferSize);
-        if (maxRenderbufferSize <= view.size.width ||
-            maxRenderbufferSize <= view.size.height)
-        {
-            @throw [NSException exceptionWithName:@"TextureIsToBigException"
-                                           reason:@"This device doesn't support texture pixsels"
-                                         userInfo:nil];
-        }
-        
-        m_view = view;
-        m_buffer = NULL;
-        
-        GLenum error = glGetError();
-        
-        glGenTextures(1, &m_selfTexture);
-        glGenFramebuffers(1, &m_framebuffer);
-        
-        error = glGetError();
-        
-        [self setTexture:m_selfTexture];
-        
-        error = glGetError();
+        m_functor = functor;
     }
     
     return self;
 }
 
-+(instancetype)textureDrawerWithView:(CGRect)view
++(instancetype)functorWrapperWithFunctor:(BFGLFunctor)functor
 {
-    return [[[self class] alloc] initWithView:view];
+    return [[[self class] alloc] initWithFunctor:functor];
 }
 
--(void)bindBuffer:(GLvoid *)buffer
-{
-    m_buffer = buffer;
-}
-
--(void)setTexture:(GLuint)texture
-{
-    m_texture = (texture == 0)?m_selfTexture:texture;
-    
-    glBindTexture(GL_TEXTURE_2D, m_texture);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-    
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_view.size.width, m_view.size.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    {
-        @throw [NSException exceptionWithName:@"FramebufferCompilationException"
-                                       reason:@"Framebuffer compilation error"
-                                     userInfo:nil];
-    }
-    
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
--(void)setProgram:(BFGLProgram *)programm
-{
-    m_program = programm;
-}
-
--(void)preparation
-{
-
-}
-
--(void)cleanup
-{
-    glDeleteTextures(1, &m_selfTexture);
-    glDeleteFramebuffers(1, &m_framebuffer);
-}
-
--(void)beforeDraw
-{
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_lastTextre);
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_lastFramebuffer);
-    glGetIntegerv(GL_VIEWPORT, m_lastViewPort);
-    glViewport(m_view.origin.x, m_view.origin.y,
-               m_view.size.width, m_view.size.height);
-    
-    glBindTexture(GL_TEXTURE_2D, m_texture);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
-}
-
--(void)afterDraw
-{
-    if (m_buffer)
-        glReadPixels(m_view.origin.x, m_view.origin.y,
-                     m_view.size.width, m_view.size.height,
-                     GL_RGB, GL_UNSIGNED_SHORT_5_6_5, m_buffer);
-    
-    glBindTexture(GL_TEXTURE_2D, m_lastTextre);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_lastFramebuffer);
-    
-    glViewport(m_lastViewPort[0], m_lastViewPort[1],
-               m_lastViewPort[2], m_lastViewPort[3]);
-}
-
-@synthesize view = m_view, texture = m_texture;
-
-@end  // BFGLToTextureDrawer
-
-@implementation BFGLBuffCleaner
-
--(instancetype)initWithColor:(CIColor *)color Mask:(GLbitfield)mask
-{
-    self = [super init];
-    if (self)
-    {
-        m_color = color;
-        m_mask = mask;
-    }
-    
-    return self;
-}
-
-+(instancetype)buffCleanerWithColor:(CIColor *)color Mask:(GLbitfield)mask
-{
-    return [[[self class] alloc] initWithColor:(CIColor *)color Mask:(GLbitfield)mask];
-}
-
--(void)afterDraw:(BFGLProgram *)program {}
 -(void)beforeDraw:(BFGLProgram *)program {}
+-(void)afterDraw:(BFGLProgram *)program {}
 -(void)draw:(BFGLProgram *)program
 {
-    glClearColor([m_color red], [m_color green], [m_color blue], [m_color alpha]);
-    glClear(m_mask);
+    m_functor(program);
 }
 
-@synthesize color = m_color, mask = m_mask;
-
-@end  // BFGLBuffCleaner
+@end  // BFGLFunctorWrapper
 
 @implementation BFGLProgram
 
@@ -178,16 +59,36 @@
             }
         
         NSError *error = nil;
-        NSString *mainPattern = @"void\\s+main\\s*\(\\s*\)";
-        NSString *attribPattern = @"(?<=attribute\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|mat2|mat3|mat4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
-        NSString *uniformPattern = @"(?<=uniform\\s{1,10}(lowp|mediump|highp)?\\s{0,10}(int|flaot|vec2|vec3|vec4|mat2|mat3|mat4|sampler1D|sampler2D){1}\\s{1,10})\\S+(?=;)";
+        NSString *mainPattern = @"void\\s+main\\s*\\(\\s*\\)";
+        NSString *structPattern = @"(?<=struct\\s{1,10})\\w+(?=\\s{0,5}\\{{0,1})";
+        NSString *allTypesPattern = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|2D|Cube)";
         NSRegularExpression *mainRegExpr = [NSRegularExpression regularExpressionWithPattern:mainPattern options:0 error:&error];
+        NSRegularExpression *structRegExpr = [NSRegularExpression regularExpressionWithPattern:structPattern options:0 error:&error];
+        
+        NSString *line = nil;
+        NSTextCheckingResult *match = nil;
+        NSEnumerator *vertexShaderEnumerator = [[vertShader componentsSeparatedByString:@"\n"] objectEnumerator];
+        while ((line = [vertexShaderEnumerator nextObject]) &&
+               !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+        {
+            if ((match = [structRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+                allTypesPattern = [allTypesPattern stringByAppendingFormat: @"|%@", [line substringWithRange:[match range]]];
+        }
+        
+        NSEnumerator *fragmentShaderEnumerator = [[fragShader componentsSeparatedByString:@"\n"] objectEnumerator];
+        while ((line = [fragmentShaderEnumerator nextObject]) &&
+               !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+        {
+            if ((match = [structRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
+                allTypesPattern = [allTypesPattern stringByAppendingFormat: @"|%@", [line substringWithRange:[match range]]];
+        }
+        
+        NSString *attribPattern = [NSString stringWithFormat:@"(?<=attribute\\s{0,5}(lowp|mediump|highp)?\\s{1,5}(%@)\\s{1,10})\\w+(?=;|\\[)", allTypesPattern];
+        NSString *uniformPattern = [NSString stringWithFormat:@"(?<=uniform\\s{0,5}(lowp|mediump|highp)?\\s{1,5}(%@)\\s{1,10})\\w+(?=;|\\[)", allTypesPattern];
         NSRegularExpression *attribRegExpr = [NSRegularExpression regularExpressionWithPattern:attribPattern options:0 error:&error];
         NSRegularExpression *uniformRegExpr = [NSRegularExpression regularExpressionWithPattern:uniformPattern options:0 error:&error];
         
-        NSString *line = nil;
-        NSTextCheckingResult *match;
-        NSEnumerator   *vertexShaderEnumerator = [[vertShader componentsSeparatedByString:@"\n"] objectEnumerator];
+        vertexShaderEnumerator = [[vertShader componentsSeparatedByString:@"\n"] objectEnumerator];
         while ((line = [vertexShaderEnumerator nextObject]) &&
               !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
         {
@@ -198,7 +99,7 @@
                 [m_uniforms setObject:[NSNull null] forKey:[line substringWithRange:[match range]]];
         }
 
-        NSEnumerator   *fragmentShaderEnumerator = [[fragShader componentsSeparatedByString:@"\n"] objectEnumerator];
+        fragmentShaderEnumerator = [[fragShader componentsSeparatedByString:@"\n"] objectEnumerator];
         while ((line = [fragmentShaderEnumerator nextObject]) &&
                !(match = [mainRegExpr firstMatchInString:line options:0 range:NSMakeRange(0, [line length])]))
         {

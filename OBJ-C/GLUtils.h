@@ -10,5 +10,5 @@
 
 #import "GLProgram.h"
 #import "Customizers/GLBlur.h"
-#import "Customizers/GLBloom.h"
+//#import "Customizers/GLBloom.h"
 #import "Customizers/GLDraw2Tex.h"
