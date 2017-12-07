@@ -32,11 +32,19 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 
 @interface BFGLFunctorWrapper : NSObject <BFGLDrawable>
 {
-    BFGLFunctor m_functor;
+    BFGLFunctor m_functorDraw;
+    BFGLFunctor m_functorBefor;
+    BFGLFunctor m_functorAfter;
 }
 
--(instancetype)initWithFunctor:(BFGLFunctor)functor;
-+(instancetype)functorWrapperWithFunctor:(BFGLFunctor)functor;
+-(instancetype)initWithFunctorDraw:(BFGLFunctor)functor;
+-(instancetype)initWithFunctorBeforDraw:(BFGLFunctor)functor;
+-(instancetype)initWithFunctorAfterDraw:(BFGLFunctor)functor;
+-(instancetype)initWithFunctorDraw:(BFGLFunctor)drawFunctor BeforDraw:(BFGLFunctor)beforFunctor AfterDraw:(BFGLFunctor)afterFunctor;
++(instancetype)functorWrapperWithFunctorDraw:(BFGLFunctor)functor;
++(instancetype)functorWrapperWithFunctorBeforDraw:(BFGLFunctor)functor;
++(instancetype)functorWrapperWithFunctorAfterDraw:(BFGLFunctor)functor;
++(instancetype)functorWrapperWithFunctorDraw:(BFGLFunctor)drawFunctor BeforDraw:(BFGLFunctor)beforFunctor AfterDraw:(BFGLFunctor)afterFunctor;
     
 @end
 

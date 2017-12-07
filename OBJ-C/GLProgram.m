@@ -11,27 +11,65 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
 
 @implementation BFGLFunctorWrapper
 
--(instancetype)initWithFunctor:(BFGLFunctor)functor
+-(instancetype)initWithFunctorDraw:(BFGLFunctor)functor
+{
+    return [self initWithFunctorDraw:functor BeforDraw:^(BFGLProgram *program){} AfterDraw:^(BFGLProgram *program){}];
+}
+
+-(instancetype)initWithFunctorBeforDraw:(BFGLFunctor)functor
+{
+    return [self initWithFunctorDraw:^(BFGLProgram *program){} BeforDraw:functor AfterDraw:^(BFGLProgram *program){}];
+}
+
+-(instancetype)initWithFunctorAfterDraw:(BFGLFunctor)functor
+{
+    return [self initWithFunctorDraw:^(BFGLProgram *program){} BeforDraw:^(BFGLProgram *program){} AfterDraw:functor];
+}
+
+-(instancetype)initWithFunctorDraw:(BFGLFunctor)drawFunctor BeforDraw:(BFGLFunctor)beforFunctor AfterDraw:(BFGLFunctor)afterFunctor;
 {
     self = [super init];
     if (self)
     {
-        m_functor = functor;
+        m_functorDraw  = drawFunctor;
+        m_functorBefor = beforFunctor;
+        m_functorAfter = afterFunctor;
     }
     
     return self;
 }
 
-+(instancetype)functorWrapperWithFunctor:(BFGLFunctor)functor
++(instancetype)functorWrapperWithFunctorDraw:(BFGLFunctor)functor
 {
-    return [[[self class] alloc] initWithFunctor:functor];
+    return [[[self class] alloc] initWithFunctorDraw:functor];
 }
 
--(void)beforeDraw:(BFGLProgram *)program {}
--(void)afterDraw:(BFGLProgram *)program {}
++(instancetype)functorWrapperWithFunctorBeforDraw:(BFGLFunctor)functor
+{
+    return [[[self class] alloc] initWithFunctorBeforDraw:functor];
+}
+
++(instancetype)functorWrapperWithFunctorAfterDraw:(BFGLFunctor)functor
+{
+    return [[[self class] alloc] initWithFunctorAfterDraw:functor];
+}
+
++(instancetype)functorWrapperWithFunctorDraw:(BFGLFunctor)drawFunctor BeforDraw:(BFGLFunctor)beforFunctor AfterDraw:(BFGLFunctor)afterFunctor
+{
+    return [[[self class] alloc] initWithFunctorDraw:drawFunctor BeforDraw:beforFunctor AfterDraw:afterFunctor];
+}
+
+-(void)beforeDraw:(BFGLProgram *)program
+{
+    m_functorBefor(program);
+}
+-(void)afterDraw:(BFGLProgram *)program
+{
+    m_functorAfter(program);
+}
 -(void)draw:(BFGLProgram *)program
 {
-    m_functor(program);
+    m_functorDraw(program);
 }
 
 @end  // BFGLFunctorWrapper
@@ -61,7 +99,7 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
         NSError *error = nil;
         NSString *mainPattern = @"void\\s+main\\s*\\(\\s*\\)";
         NSString *structPattern = @"(?<=struct\\s{1,10})\\w+(?=\\s{0,5}\\{{0,1})";
-        NSString *allTypesPattern = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|2D|Cube)";
+        NSString *allTypesPattern = @"int|flaot|bool|(i|b)?vec[2-4]|mat[2-4]|sampler(1D|2D|Cube)";
         NSRegularExpression *mainRegExpr = [NSRegularExpression regularExpressionWithPattern:mainPattern options:0 error:&error];
         NSRegularExpression *structRegExpr = [NSRegularExpression regularExpressionWithPattern:structPattern options:0 error:&error];
         

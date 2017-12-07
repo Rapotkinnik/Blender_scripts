@@ -1,12 +1,3 @@
-#required this structure:
-#typedef struct
-#{
-#    GLfloat vertexPosition[3];
-#    GLfloat vertexColor[4];
-#    GLfloat normalDirection[3];
-#    GLfloat texturePosition[3];
-#}Vertex;
-
 bl_info = {
     'name': 'Objective-C header',
     'author': 'Nikolay Rapotkin',
@@ -32,17 +23,6 @@ from progress_report     import ProgressReport, ProgressReportSubstep
 from bpy_extras.io_utils import ExportHelper, orientation_helper_factory, path_reference_mode, axis_conversion
 
 IOOBJOrientationHelper = orientation_helper_factory("IOOBJOrientationHelper", axis_forward='-Z', axis_up='Y')
-
-# import sympy
-# x = sympy.symbols('x')
-# sympy.interpolate([(-1, 2), (1, 2), (2, 5)], x)
-# x ** 2 + 1
-
-# from scipy.interpolate import interp1d
-# x = np.linspace(0, 10, 10)
-# y = np.exp(-x / 3.0)
-# f = interp1d(x, y)
-# f2 = interp1d(x, y, kind=’cubic’)
 
 def bezier_interpolation(points):
     bezier_points = []
@@ -87,11 +67,31 @@ def bezier_interpolation(points):
     bezier_points.append(points[-1])
     return bezier_points
 
-def name_compact(name):
+
+def matrix_to_string(matrix, str_prefix):
+    matrix_str = str_prefix
+    matrix_str += ', '.join(('%.6f' % co for co in matrix[0])) + ',' + str_prefix
+    matrix_str += ', '.join(('%.6f' % co for co in matrix[1])) + ',' + str_prefix
+    matrix_str += ', '.join(('%.6f' % co for co in matrix[2])) + ',' + str_prefix
+    matrix_str += ', '.join(('%.6f' % co for co in matrix[3]))
+
+    return matrix_str
+
+
+def class_name(name):
     if name is None:
         return 'None'
     else:
-        return name.replace(' ', '_')
+        c_name = name.replace(' ', '').replace('.', '')
+        return 'BF' + c_name[0].upper() + c_name[1:]
+
+
+def member_name(name):
+    if name is None:
+        return 'None'
+    else:
+        m_name = name.replace(' ', '').replace('.', '')
+        return m_name[0].lower() + m_name[1:]
 
 
 def mesh_triangulate(mesh):
@@ -201,11 +201,12 @@ def bezier_points_for_NURB_spline(spline):
         bezier_points = bezier_points[1:-3]
 
     return bezier_points
-      
+
+
 class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper):
 
-    bl_idname = 'export_scene.h'
-    bl_label =  'Export Objective-C header'
+    bl_label   = 'Export Objective-C header'
+    bl_idname  = 'export_scene.h'
     bl_options = {'PRESET'}
 
     filename_ext = ".h"
@@ -455,6 +456,31 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         if bpy.ops.object.mode_set.poll():
             bpy.ops.object.mode_set(mode='OBJECT')
 
+        objects = context.selected_objects if self.prop_use_selection else context.scene.objects
+        dir_path, _ = os.path.split(self.filepath)
+
+        sorted_objects = []
+        for i in range(1, len(objects) - 1):
+            if objects[i].type in {'MESH', 'CURVE', 'SURFACE', 'ARMATURE'}:
+                for j in range(len(sorted_objects) - 2):
+                    if len(objects[i].name) < len(sorted_objects[j].name):
+                        sorted_objects.insert(j, objects[i])
+                        break
+                else:
+                    sorted_objects.append(objects[i])
+
+        for obj in sorted_objects:
+            try:
+                mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
+                self.export_mesh(mesh, dir=dir_path, name=obj.name)
+            except RuntimeError:
+                continue
+
+        self.export_scene(context.scene, sorted_objects, dir=dir_path, global_matrix=global_matrix)
+
+        self.report({'INFO'}, 'Objects exported successfully!')
+        return {'FINISHED'}
+
         scene_name = context.scene.name.replace(' ', '_').replace('.', '_')
         objects = context.selected_objects if self.prop_use_selection else context.scene.objects
         dir_path, main_file_name = os.path.split(self.filepath)
@@ -471,9 +497,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 resource_file.write('#define _%s_H_\n\n' % resource_file_name.upper())
             else:
                 resource_file = main_file
-
-            materials = []
-            self.export_structure(resource_file)
 
             for obj in objects:
                 if self.prop_export_curve_as_function and obj.type == 'CURVE':
@@ -499,14 +522,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
                 if self.prop_export_object_as_file:
                     main_file.write('#include "%s.h"\n\n' % mesh_name.lower())
-                    with open(os.path.join(dir_path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as object_file:
-                        object_file.write('#ifndef _%s_H_\n' % mesh_name)
-                        object_file.write('#define _%s_H_\n\n' % mesh_name)
-                        object_file.write('#include "%s.h"\n\n' % resource_file_name)
-                        self.export_mesh(mesh, mesh_name, object_file)
-                        object_file.write('#endif  // _%s_H_\n' % mesh_name)
+                    with open(os.path.join(dir_path, '%s.h' % mesh_name.lower()), "w+t", encoding="utf8", newline="\n") as file:
+                        object_file.write('#import "GLProgram.h"\n\n')
+                        self.export_mesh(mesh, object_file, name=mesh_name, matrix_world=obj.matrix_world)
                 else:
-                    self.export_mesh(mesh, mesh_name, main_file)
+                    self.export_mesh(mesh, main_file, name=mesh_name, matrix_world=obj.matrix_world)
 
                 cur_material = obj.active_material
                 if cur_material and cur_material.name not in materials:
@@ -522,55 +542,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         self.report({'INFO'}, 'Objects exported successfully!')
         return {'FINISHED'}
 
-    def export_structure(self, file):
-        file.write('#import "GLKMathTypes.h"\n\n')
-
-        structure = '\tGLfloat vertexPosition[3];\n'
-        if self.prop_export_color and not self.prop_export_as_color_map:
-            structure += '\tGLfloat vertexColor[4];\n'
-        if self.prop_export_normal:
-            structure += '\tGLfloat normalDirection[3];\n'
-        if self.prop_export_texture:
-            structure += '\tGLfloat texturePosition[2];\n'
-
-        file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
-
-        file.write('typedef struct {\n'
-                   '\tGLfloat ambient[4];\n'
-                   '\tGLfloat diffuse[4];\n'
-                   '\tGLfloat specular[4];\n'
-                   '\tGLfloat emission[4];\n'
-                   '\tGLfloat shininess;\n'
-                   '\tGLfloat transparency;\n'
-                   '\tunsigned char *texture;\n'
-                   '} Material;\n\n')
-
-        file.write('typedef struct {\n'
-                   '\tGLfloat ambient[4];\n'
-                   '\tGLfloat diffuse[4];\n'
-                   '\tGLfloat specular[4];\n'
-                   '\tGLfloat position[4];\n'
-                   '\tGLfloat direction[4];\n'
-                   '} Light;\n\n')
-
-
-    '''
-    def export_texture(self, mesh, file):
-        file.write() = '\tGLfloat vertexPosition[3];\n'
-        if self.prop_export_color and not self.prop_export_as_color_map:
-            structure += '\tGLfloat vertexColor[4];\n'
-        if self.prop_export_normal:
-            structure += '\tGLfloat normalDirection[3];\n'
-        if self.prop_export_texture:
-            structure += '\tGLfloat texturePosition[2];\n'
-
-        file.write('typedef struct {\n%s} Vertex;\n\n' % structure)
-
-        typedef struct {
-            const unsigned int width, height;
-            const unsigned char[] =
-        } Texture
-    '''
     '''
     @staticmethod
     def export_material(material, scene, file):
@@ -691,21 +662,184 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             fw('%s %s\n' % (key, repr(filepath)[1:-1]))
     '''
 
+    def export_scene(self, scene, objects, **kwargs):
+        scene_header_file_name = os.path.join(kwargs['dir'], '%s.h' % class_name(scene.name))
+        scene_source_file_name = os.path.join(kwargs['dir'], '%s.m' % class_name(scene.name))
+        with open(scene_header_file_name, "w+t", encoding="utf8", newline="\n") as file:
+            for obj in objects:
+                file.write('#import "%s.h"\n' % class_name(obj.name))
 
-    def export_mesh(self, mesh, mesh_name, file):
+            file.write('\n')
+            file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(scene.name))
+            file.write('\tGLKMatrix4 m_globalMatrix;\n\n')
+            for obj in objects:
+                file.write('\t%s *m_%s;\n' % (class_name(obj.name), member_name(obj.name)))
+            file.write('}\n\n')
+            file.write('@property (nonatomic) GLKMatrix4 globalMatrix;\n')
+            for obj in objects:
+                file.write('@property (nonatomic, readonly) %s *%s;\n' % (class_name(obj.name), member_name(obj.name)))
+            file.write('\n')
+            file.write('@end\n\n')
 
-        # Триангуляция полигонов
-        if self.prop_use_triangles:
-            import bmesh
+        with open(scene_source_file_name, "w+t", encoding="utf8", newline="\n") as file:
+            file.write('#import "%s.h"\n\n' % class_name(scene.name))
 
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
-            bmesh.ops.triangulate(bm, faces=bm.faces)
-            bm.to_mesh(mesh)
-            bm.free()
+            for obj in objects:
+                matrix = matrix_to_string(obj.matrix_basis, '\n\t')
+                file.write('float %sModelMatrix[16] = {%s\n};\n\n' % (class_name(obj.name), matrix))
 
-        # Считаем нормали и получаем имя объекта
+            camera = scene.camera
+            vp_matrix_str  = ', '.join(('%.6f' % co for co in camera.location)) + ',\n\t\t' + ' ' * 32
+            vp_matrix_str += ', 0.0' * 3 + ',\n\t\t' + ' ' * 32
+            vp_matrix_str += ', '.join(('%.6f' % co for co in camera.rotation_euler))
+
+            file.write('@implementation %s\n\n'
+                       '-(id)init\n'
+                       '{\n'
+                       '\tself = [super init];\n'
+                       '\tif (self)\n'
+                       '\t{\n'
+                       '\t\tm_globalMatrix = GLKMatrix4MakeLookAt(%s);\n\n' % (class_name(scene.name), vp_matrix_str))
+            # TODO: multiply m_globalMatrix with kwargs['global_matrix']
+            for obj in objects:
+                file.write('\t\tm_%s = [[%s alloc] init];\n' % (member_name(obj.name), class_name(obj.name)))
+            file.write('\n')
+            for obj in objects:
+                file.write('\t\t[m_%s setModelMatrix: GLKMatrix4MakeWithArray(%sModelMatrix)];\n' % (member_name(obj.name), class_name(obj.name)))
+            file.write('\t}\n\n'
+                       '\treturn self;\n'
+                       '}\n\n')
+            file.write('-(void)dealloc\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)beforeDraw:(BFGLProgram *)program\n'
+                       '{\n')
+            for obj in objects:
+                file.write('\t[m_%s beforeDraw:program];\n' % member_name(obj.name))
+            file.write('}\n\n')
+            file.write('-(void)afterDraw:(BFGLProgram *)program\n'
+                       '{\n')
+            for obj in objects:
+                file.write('\t[m_%s afterDraw:program];\n' % member_name(obj.name))
+            file.write('}\n\n')
+            file.write('-(void)draw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '\tGLint global_matrix = [program uniform:@"globalMatrix"];\n\n'
+                       '\tglUniformMatrix4fv(global_matrix, 1, 0, m_globalMatrix.m);\n\n')
+            for obj in objects:
+                file.write('\t[m_%s draw:program];\n' % member_name(obj.name))
+            file.write('}\n\n'
+                       '@synthesize globalMatrix = m_globalMatrix,\n')
+            for obj in objects:
+                file.write(' ' * 12 + '%s = m_%s,\n' % (member_name(obj.name), member_name(obj.name)))
+
+            file.seek(file.tell() - 2, os.SEEK_SET)
+            file.write(';\n')
+            file.write('@end')
+
+    def export_mesh(self, mesh, **kwargs):
+        mesh_triangulate(mesh)
         mesh.calc_normals_split()
+
+        indices_count = 0
+        for polygon in mesh.polygons:
+            indices_count += polygon.loop_total
+
+        indices_str = '\n\t\t\t'
+        for polygon in mesh.polygons:
+            indices_str += ', '.join(('%d' % mesh.loops[i].vertex_index for i in polygon.loop_indices)) + ',\n\t\t\t'
+
+        indices_str = indices_str[:-5] + '\n\t\t'
+
+        vertex_count = len(mesh.vertices)
+
+        vertexes_str = '\n\t\t\t'
+        for vertex in mesh.vertices:
+            row_data = '{%s}' % (', '.join(('%.6f' % co for co in vertex.co)))
+            if self.prop_export_color and not self.prop_export_as_color_map:
+                row_data += ', {%d, %d, %d, %d}' % (0.0, 0.0, 0.0, 1.0)
+            if self.prop_export_normal:
+                row_data += ', {%s}' % (', '.join(('%.6f' % co for co in vertex.normal)))
+            if self.prop_export_texture:
+                row_data += ', {%.3f, %.3f}' % (0.0, 0.0)
+
+            vertexes_str += '{%s},\n\t\t\t' % row_data
+
+        vertexes_str = vertexes_str[:-5] + '\n\t\t'
+
+        #Добавить карту цветов и, возможно, карту нормалей, которую можно генерировать прям в блендоре
+
+        #Данные анимации - массив массивов (для каждого сплайна) массивов (для каждой точки) сплайнов
+        # actions = [object.shape_keys.animation_data.action]
+        # for track in surface.shape_keys.animation_data.nla_tracks:
+        #     for strip in track.strips:
+        #         actions.append(strip.action)
+
+        header_file_path = os.path.join(kwargs['dir'], '%s.h' % class_name(kwargs['name']))
+        with open(header_file_path, "w+t", encoding="utf8", newline="\n") as file:
+            file.write('#import "GLProgram.h"\n\n')
+            file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(kwargs['name']))
+            file.write('\tGLKMatrix4 m_modelMatrix;\n')
+            # file.write('\tconst BFMaterial m_Material;\n')
+            # file.write('\tconst GLuint m_Indices[%d];\n' % indices_count)
+            # file.write('\tconst BFVertex m_Vertexes[%d];\n' % vertex_count)
+
+            # for action in actions:
+            #     file.write('\tNSMutableArray *m_%sData;\n' % action.name)
+            file.write('}\n\n')
+            file.write('@property (nonatomic) GLKMatrix4 modelMatrix;\n\n')
+
+            # for action in actions:
+            #     file.write('-(void)%s:(float)t;\n' % action.name)
+            file.write('@end\n\n')
+
+        source_file_path = os.path.join(kwargs['dir'], '%s.m' % class_name(kwargs['name']))
+        with open(source_file_path, "w+t", encoding="utf8", newline="\n") as file:
+            file.write('#import "%s.h"\n\n' % class_name(kwargs['name']))
+            file.write('#import "Math.h"\n\n')
+            file.write('const GLuint m_Indices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
+            file.write('const BFVertex m_Vertexes%s[%d] = {%s};\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
+            file.write('@implementation %s\n\n'
+                       '-(id)init\n'
+                       '{\n'
+                       '\tself = [super init];\n'
+                       '\tif (self)\n'
+                       '\t{\n'
+                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n'
+                       '\t}\n\n'
+                       '\treturn self;\n'
+                       '}\n\n' % class_name(kwargs['name']))
+            file.write('-(void)dealloc\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)beforeDraw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)afterDraw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)draw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '\tGLint matrix    = [program uniform:@"modelMatrix"];\n'
+                       # '\tGLint texture   = [program uniform:@"Texture"];\n'
+                       '\tGLint position  = [program attribute:@"position"];\n'
+                       '\tGLint color     = [program attribute:@"color"];\n'
+                       '\tGLint normal    = [program attribute:@"normal"];\n'
+                       # '\t\tGLint textCoord = [program attribute:@"textCord"];\n'
+                       '\n'
+                       '\tglEnableVertexAttribArray(position);\n'
+                       '\tglEnableVertexAttribArray(normal);\n'
+                       # '\t\tglEnableVertexAttribArray(texCoord);\n
+                       '\n'
+                       '\tglUniformMatrix4fv(matrix, 1, 0, m_modelMatrix.m);\n'
+                       '\tglVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].coord);\n'
+                       '\tglVertexAttribPointer(normal, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].normal);\n\n'
+                       '\tglDrawElements(GL_TRIANGLES, sizeof(m_Indices%s)/sizeof(GLuint), GL_UNSIGNED_INT, m_Indices%s);\n'
+                       '}\n\n' % (class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name'])))
+            file.write('@synthesize modelMatrix = m_modelMatrix;\n\n')
+            file.write('@end')
+
+        return
 
         if self.prop_use_vertex_indices:
             # Если мы решили сохранить порядок вывода вершин, то для нормальной отрисовки
