@@ -1,10 +1,10 @@
 bl_info = {
     'name': 'Objective-C header',
     'author': 'Nikolay Rapotkin',
-    'version': (0, 0, 3),
+    'version': (0, 0, 4),
     'blender': (2, 74, 0),
     'location': 'File > Export',
-    'description': 'Export meshes into Objective-C header for OpenGL ES painting',
+    'description': 'Export meshes into Objective-C header for OpenGL ES drawing',
     'warning': '',
     'wiki_url': '',
     'tracker_url': '',
@@ -23,6 +23,52 @@ from progress_report     import ProgressReport, ProgressReportSubstep
 from bpy_extras.io_utils import ExportHelper, orientation_helper_factory, path_reference_mode, axis_conversion
 
 IOOBJOrientationHelper = orientation_helper_factory("IOOBJOrientationHelper", axis_forward='-Z', axis_up='Y')
+
+
+def matrix_to_string(matrix, str_prefix, with_first=True):
+    matrix_str = ''
+    for vector in matrix:
+        matrix_str += str_prefix + ', '.join(('%.6f' % co for co in vector)) + ',\n'
+
+    return matrix_str[:-2] if with_first else matrix_str[len(str_prefix):-2]
+
+
+def struct_to_string(struct, str_prefix):
+    matrix_str = ''
+    for sub in struct:
+        try:
+            matrix_str += str_prefix + '{' + ', '.join(('%.6f' % co for co in sub)) + '},\n'
+        except TypeError:
+            matrix_str += str_prefix + '%.6f' % sub + ',\n'
+
+    return matrix_str[:-2]
+
+
+def class_name(name):
+    if name is None:
+        return 'None'
+    else:
+        c_name = name.replace(' ', '').replace('.', '')
+        return 'BF' + c_name[0].upper() + c_name[1:]
+
+
+def member_name(name):
+    if name is None:
+        return 'None'
+    else:
+        m_name = name.replace(' ', '').replace('.', '')
+        return m_name[0].lower() + m_name[1:]
+
+
+def mesh_triangulate(mesh):
+    import bmesh
+    bm = bmesh.new()
+
+    bm.from_mesh(mesh)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+
 
 def bezier_interpolation(points):
     bezier_points = []
@@ -66,42 +112,6 @@ def bezier_interpolation(points):
     bezier_points[-1] = 0.5 * (points[-1] + bezier_points[-2])  # P2 for last segment
     bezier_points.append(points[-1])
     return bezier_points
-
-
-def matrix_to_string(matrix, str_prefix):
-    matrix_str = str_prefix
-    matrix_str += ', '.join(('%.6f' % co for co in matrix[0])) + ',' + str_prefix
-    matrix_str += ', '.join(('%.6f' % co for co in matrix[1])) + ',' + str_prefix
-    matrix_str += ', '.join(('%.6f' % co for co in matrix[2])) + ',' + str_prefix
-    matrix_str += ', '.join(('%.6f' % co for co in matrix[3]))
-
-    return matrix_str
-
-
-def class_name(name):
-    if name is None:
-        return 'None'
-    else:
-        c_name = name.replace(' ', '').replace('.', '')
-        return 'BF' + c_name[0].upper() + c_name[1:]
-
-
-def member_name(name):
-    if name is None:
-        return 'None'
-    else:
-        m_name = name.replace(' ', '').replace('.', '')
-        return m_name[0].lower() + m_name[1:]
-
-
-def mesh_triangulate(mesh):
-    import bmesh
-    bm = bmesh.new()
-
-    bm.from_mesh(mesh)
-    bmesh.ops.triangulate(bm, faces=bm.faces)
-    bm.to_mesh(mesh)
-    bm.free()
 
 
 def bezier_points_for_bezier_spline(spline):
@@ -201,6 +211,33 @@ def bezier_points_for_NURB_spline(spline):
         bezier_points = bezier_points[1:-3]
 
     return bezier_points
+
+
+def material_to_struct(material):
+    mirror_settings = material.raytrace_mirror
+    if mirror_settings.use:
+        ambient_color = [col * mirror_settings.reflect_factor for col in material.mirror_color]
+    else:
+        ambient_color = [col * material.ambient for col in bpy.context.scene.world.ambient_color]
+
+    diffuse_color = [col * material.diffuse_intensity for col in material.diffuse_color]
+    specular_color = [col * material.specular_intensity for col in material.specular_color]
+    emission_color = [col * material.emit for col in material.diffuse_color]
+
+    ambient_color.append(material.alpha)
+    diffuse_color.append(material.alpha)
+    specular_color.append(material.specular_alpha)
+    emission_color.append(material.alpha)
+
+    # XXX Blender has no color emission, it's using diffuse color instead...
+    # emission_color = [col * material.emit for col in material.diffuse_color]
+    # emission_color.append(1.0)
+
+    # emission_color = [col * material.volume.emission for col in material.volume.emission_color]
+
+    shininess = (0.4 - material.specular_slope) / 0.0004 if material.specular_shader == 'WARDISO' else (material.specular_hardness - 1) / 0.51
+
+    return ambient_color, diffuse_color, specular_color, emission_color, shininess
 
 
 class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper):
@@ -460,19 +497,24 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         dir_path, _ = os.path.split(self.filepath)
 
         sorted_objects = []
-        for i in range(1, len(objects) - 1):
+        for i in range(len(objects) - 1):
             if objects[i].type in {'MESH', 'CURVE', 'SURFACE', 'ARMATURE'}:
-                for j in range(len(sorted_objects) - 2):
+                for j in range(len(sorted_objects) - 1):
                     if len(objects[i].name) < len(sorted_objects[j].name):
                         sorted_objects.insert(j, objects[i])
                         break
                 else:
                     sorted_objects.append(objects[i])
 
+        # for group in bpy.data.groups:
+        #     self.export_group(group, dir=dir_path)
+        #     for object in group.objects:
+        #         sorted_objects.remove(object)
+
         for obj in sorted_objects:
             try:
                 mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
-                self.export_mesh(mesh, dir=dir_path, name=obj.name)
+                self.export_mesh(mesh, dir=dir_path, name=obj.name, material=obj.active_material)
             except RuntimeError:
                 continue
 
@@ -566,46 +608,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                    # mesh.uv_texutres[]
     '''
 
-    def export_material(self, material, scene, file):
-
-        # Ambient
-        mirror_settings = material.raytrace_mirror
-        if mirror_settings.use:
-            ambient_color = [col * mirror_settings.reflect_factor for col in  material.mirror_color]
-        else:
-            ambient_color = [col * material.ambient for col in scene.world.ambient_color]
-            # ambient_color = (material.ambient, material.ambient,material.ambient, 1.0)  # Do not use world color! Why?
-
-        ambient_color.append(1.0)
-
-        diffuse_color = [col * material.diffuse_intensity for col in material.diffuse_color]
-        diffuse_color.append(material.translucency)
-
-        specular_color = [col * material.specular_intensity for col in material.specular_color]
-        specular_color.append(material.specular_alpha)
-
-        # XXX Blender has no color emission, it's using diffuse color instead...
-        # emission_color = [col * material.emit for col in material.diffuse_color]
-        # emission_color.append(1.0)
-
-        emission_color = [col * material.volume.emission for col in material.volume.emission_color]
-        emission_color.append(1.0)
-
-        shininess = (0.4 - material.specular_slope) / 0.0004 if material.specular_shader == 'WARDISO' else (material.specular_hardness - 1) / 0.51
-
-        file.write('const Material %s = {\n'
-                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # ambient
-                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # diffuse
-                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # specular
-                   '\t{%.4f, %.4f, %.4f, %.4f},\n'  # emission
-                   '\t%.4f, %.4f\n'  # shininess, transparency
-                   '};\n\n' % (material.name.upper(),
-                               ambient_color[0], ambient_color[1], ambient_color[2], ambient_color[3],
-                               diffuse_color[0], diffuse_color[1], diffuse_color[2], diffuse_color[3],
-                               specular_color[0], specular_color[1], specular_color[2], specular_color[3],
-                               emission_color[0], emission_color[1], emission_color[2], emission_color[3],
-                               shininess, material.alpha))
-
     '''
     # Write images!
 
@@ -675,6 +677,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for obj in objects:
                 file.write('\t%s *m_%s;\n' % (class_name(obj.name), member_name(obj.name)))
             file.write('}\n\n')
+            file.write('-(void)resetGlobalMatrix;\n')
+            file.write('-(void)scaleGlobalMatrix:(float[3])axisComps;\n')
+            file.write('-(void)translateGlobalMatrix:(float[3])axisComps;\n')
+            file.write('-(void)rotateGlobalMatrix:(float)radians AxisComps:(float[3])axisComps;\n\n')
             file.write('@property (nonatomic) GLKMatrix4 globalMatrix;\n')
             for obj in objects:
                 file.write('@property (nonatomic, readonly) %s *%s;\n' % (class_name(obj.name), member_name(obj.name)))
@@ -685,22 +691,27 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('#import "%s.h"\n\n' % class_name(scene.name))
 
             for obj in objects:
-                matrix = matrix_to_string(obj.matrix_basis, '\n\t')
-                file.write('float %sModelMatrix[16] = {%s\n};\n\n' % (class_name(obj.name), matrix))
+                matrix = matrix_to_string(kwargs['global_matrix'] * obj.matrix_basis, '\t')
+                file.write('float %sModelMatrix[16] = {\n%s\n};\n\n' % (class_name(obj.name), matrix))
 
+            render = scene.render
             camera = scene.camera
-            vp_matrix_str  = ', '.join(('%.6f' % co for co in camera.location)) + ',\n\t\t' + ' ' * 32
-            vp_matrix_str += ', 0.0' * 3 + ',\n\t\t' + ' ' * 32
-            vp_matrix_str += ', '.join(('%.6f' % co for co in camera.rotation_euler))
+            camera_data = scene.camera.data
+            axis_up_vector = (1.0 if self.axis_up == 'X' else -1.0 if self.axis_up == '-X' else 0.0,
+                              1.0 if self.axis_up == 'Y' else -1.0 if self.axis_up == '-Y' else 0.0,
+                              1.0 if self.axis_up == 'Z' else -1.0 if self.axis_up == '-Z' else 0.0)
+            vp_matrix = mathutils.Matrix(
+                (camera.location,
+                 (0.0, 0.0, 0.0),
+                 axis_up_vector))  # TODO rotate global_matrix by camera.rotation_euler use self.axis_up
 
-            file.write('@implementation %s\n\n'
-                       '-(id)init\n'
+            file.write('@implementation %s\n\n' % class_name(scene.name))
+            file.write('-(id)init\n'
                        '{\n'
                        '\tself = [super init];\n'
                        '\tif (self)\n'
                        '\t{\n'
-                       '\t\tm_globalMatrix = GLKMatrix4MakeLookAt(%s);\n\n' % (class_name(scene.name), vp_matrix_str))
-            # TODO: multiply m_globalMatrix with kwargs['global_matrix']
+                       '\t\t[self resetGlobalMatrix];\n\n')
             for obj in objects:
                 file.write('\t\tm_%s = [[%s alloc] init];\n' % (member_name(obj.name), class_name(obj.name)))
             file.write('\n')
@@ -711,6 +722,28 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '}\n\n')
             file.write('-(void)dealloc\n'
                        '{\n'
+                       '}\n\n')
+            file.write('-(void)resetGlobalMatrix\n'
+                       '{\n')
+            if camera.type == 'ORTHO':
+                file.write('\tGLKMatrix4 projectionMatrix = GLKMatrix4MakeOrtho(%s);\n' % '')  # * camer.ortho_scale!
+            if camera.type == 'PERSP':
+                # camera.angle if camera.lens if camera.lens_unit
+                file.write('\tGLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(%s)' % '')  # GLKMatrix4MakeFrustum?
+            file.write('\tGLKMatrix4 viewMatrix = GLKMatrix4MakeLookAt(%s);\n\n' % matrix_to_string(vp_matrix, '\t' + ' ' * 38, False))
+            file.write('\tm_globalMatrix = GLKMatrix4Multiply(projectionMatrix, viewMatrix);\n'
+                       '}\n\n')
+            file.write('-(void)scaleGlobalMatrix:(float[3])axisComps\n'
+                       '{\n'
+                       '\tm_globalMatrix = GLKMatrix4Scale(m_globalMatrix, axisComps[0], axisComps[1], axisComps[2]);\n'
+                       '}\n\n')
+            file.write('-(void)translateGlobalMatrix:(float[3])axisComps\n'
+                       '{\n'
+                       '\tm_globalMatrix = GLKMatrix4Translate(m_globalMatrix, axisComps[0], axisComps[1], axisComps[2]);\n'
+                       '}\n\n')
+            file.write('-(void)rotateGlobalMatrix:(float)radians AxisComps:(float[3])axisComps\n'
+                       '{\n'
+                       '\tm_globalMatrix = GLKMatrix4Rotate(m_globalMatrix, radians, axisComps[0], axisComps[1], axisComps[2]);\n'
                        '}\n\n')
             file.write('-(void)beforeDraw:(BFGLProgram *)program\n'
                        '{\n')
@@ -724,7 +757,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('}\n\n')
             file.write('-(void)draw:(BFGLProgram *)program\n'
                        '{\n'
-                       '\tGLint global_matrix = [program uniform:@"globalMatrix"];\n\n'
+                       '\tglViewport(%d, %d, %d, %d);\n\n' % (camera_data.shift_x, camera_data.shift_y, render.resolution_x, render.resolution_y))
+            file.write('\tGLint global_matrix = [program uniform:@"globalMatrix"];\n\n'
                        '\tglUniformMatrix4fv(global_matrix, 1, 0, m_globalMatrix.m);\n\n')
             for obj in objects:
                 file.write('\t[m_%s draw:program];\n' % member_name(obj.name))
@@ -780,7 +814,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('#import "GLProgram.h"\n\n')
             file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(kwargs['name']))
             file.write('\tGLKMatrix4 m_modelMatrix;\n')
-            # file.write('\tconst BFMaterial m_Material;\n')
+            if kwargs['material']:
+                file.write('\tBFMaterial m_material;\n')
             # file.write('\tconst GLuint m_Indices[%d];\n' % indices_count)
             # file.write('\tconst BFVertex m_Vertexes[%d];\n' % vertex_count)
 
@@ -797,18 +832,20 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         with open(source_file_path, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "%s.h"\n\n' % class_name(kwargs['name']))
             file.write('#import "Math.h"\n\n')
-            file.write('const GLuint m_Indices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
-            file.write('const BFVertex m_Vertexes%s[%d] = {%s};\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
+            file.write('static const GLuint m_Indices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
+            file.write('static const BFVertex m_Vertexes%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
             file.write('@implementation %s\n\n'
                        '-(id)init\n'
                        '{\n'
                        '\tself = [super init];\n'
                        '\tif (self)\n'
                        '\t{\n'
-                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n'
-                       '\t}\n\n'
+                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n' % class_name(kwargs['name']))
+            if kwargs['material']:
+                file.write('\t\tm_material = (BFMaterial){\n%s};\n' % struct_to_string(material_to_struct(kwargs['material']), '\t' + ' ' * 26))
+            file.write('\t}\n\n'
                        '\treturn self;\n'
-                       '}\n\n' % class_name(kwargs['name']))
+                       '}\n\n')
             file.write('-(void)dealloc\n'
                        '{\n'
                        '}\n\n')
@@ -830,8 +867,22 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '\tglEnableVertexAttribArray(position);\n'
                        '\tglEnableVertexAttribArray(normal);\n'
                        # '\t\tglEnableVertexAttribArray(texCoord);\n
-                       '\n'
-                       '\tglUniformMatrix4fv(matrix, 1, 0, m_modelMatrix.m);\n'
+                       '\n')
+            if kwargs['material']:
+                file.write('\t@try\n'
+                           '\t{\n'
+                           '\t\tGLint materialAmbientColor  = [program uniform:@"material.ambientColor"];\n'
+                           '\t\tGLint materialDiffuseColor  = [program uniform:@"material.diffuseColor"];\n'
+                           '\t\tGLint materialSpecularColor = [program uniform:@"material.specularColor"];\n'
+                           '\t\tGLint materialEmissionColor = [program uniform:@"material.emissionColor"];\n'
+                           '\n'
+                           '\t\tglUniform4fv(materialAmbientColor, 1, m_material.ambientColor);\n'
+                           '\t\tglUniform4fv(materialDiffuseColor, 1, m_material.diffuseColor);\n'
+                           '\t\tglUniform4fv(materialSpecularColor, 1, m_material.specularColor);\n'
+                           '\t\tglUniform4fv(materialEmissionColor, 1, m_material.emissionColor);\n'
+                           '\t}\n'
+                           '\t@catch(NSException *e) { NSLog(@"Exception %@ rises with reason: %@", [e name], [e reason]); }\n\n')
+            file.write('\tglUniformMatrix4fv(matrix, 1, 0, m_modelMatrix.m);\n'
                        '\tglVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].coord);\n'
                        '\tglVertexAttribPointer(normal, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].normal);\n\n'
                        '\tglDrawElements(GL_TRIANGLES, sizeof(m_Indices%s)/sizeof(GLuint), GL_UNSIGNED_INT, m_Indices%s);\n'

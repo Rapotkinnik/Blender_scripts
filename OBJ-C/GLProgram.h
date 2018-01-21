@@ -8,6 +8,8 @@
 #import <GLKit/GLKit.h>
 #import <Foundation/Foundation.h>
 
+#define MakeAxisComponents(x, y, z) (float[3]){(x), (y), (z)}
+
 @class BFGLProgram;
 
 typedef void(^BFGLFunctor)(BFGLProgram *program);
