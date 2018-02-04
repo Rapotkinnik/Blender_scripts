@@ -370,7 +370,7 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
 -(GLint)attribute:(NSString *)name
 {
     GLint attribute = glGetAttribLocation(m_program, [name UTF8String]);
-    if (attribute > 0)
+    if (attribute >= 0)
         return attribute;
     
 //    NSNumber *value = [m_attribs objectForKey:name];
@@ -385,7 +385,7 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
 -(GLint)uniform:(NSString *)name
 {
     GLint uniform = glGetUniformLocation(m_program, [name UTF8String]);
-    if (uniform > 0)
+    if (uniform >= 0)
         return uniform;
     
 //    NSNumber *value = [m_uniforms objectForKey:name];

@@ -81,6 +81,22 @@ static const float MACHINE_EPSILON = 2e-54;
 
 @end
 
+@implementation StaticCounter
+
+static int m_count;
+
++(int)count
+{
+    return m_count++;
+}
+
++(void)reset
+{
+    m_count = 0;
+}
+
+@end
+
 @implementation BFValue (BFVertex)
 
 +(BFValue *)valueWithBFVertex:(BFVertex)value

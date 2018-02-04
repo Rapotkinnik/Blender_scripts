@@ -240,6 +240,17 @@ def material_to_struct(material):
     return ambient_color, diffuse_color, specular_color, emission_color, shininess
 
 
+def light_to_struct(lamp):
+    if lamp.type == 'POINT':
+        return ((0.0, 0.0, 0.0),
+                bpy.context.scene.world.ambient_color,
+                lamp.color,
+                lamp.color,
+                lamp.energy, # constant_coefficient, - этой хуйни вообще нет
+                lamp.linear_attenuation,
+                lamp.quadratic_attenuation,
+                lamp.energy)
+
 class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper):
 
     bl_label   = 'Export Objective-C header'
@@ -497,14 +508,14 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         dir_path, _ = os.path.split(self.filepath)
 
         sorted_objects = []
-        for i in range(len(objects) - 1):
-            if objects[i].type in {'MESH', 'CURVE', 'SURFACE', 'ARMATURE'}:
-                for j in range(len(sorted_objects) - 1):
-                    if len(objects[i].name) < len(sorted_objects[j].name):
-                        sorted_objects.insert(j, objects[i])
+        for obj in objects:
+            if obj.type in {'MESH', 'CURVE', 'SURFACE', 'ARMATURE', 'LAMP'}:
+                for i in range(len(sorted_objects)):
+                    if len(obj.name) < len(sorted_objects[i].name):
+                        sorted_objects.insert(i, obj)
                         break
                 else:
-                    sorted_objects.append(objects[i])
+                    sorted_objects.append(obj)
 
         # for group in bpy.data.groups:
         #     self.export_group(group, dir=dir_path)
@@ -512,6 +523,10 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         #         sorted_objects.remove(object)
 
         for obj in sorted_objects:
+            if obj.type == 'LAMP':
+                self.export_light(obj.data, dir=dir_path, name=obj.name)
+                continue
+
             try:
                 mesh = obj.to_mesh(context.scene, self.prop_use_mesh_modifiers, 'PREVIEW', calc_tessface=False)
                 self.export_mesh(mesh, dir=dir_path, name=obj.name, material=obj.active_material)
@@ -771,6 +786,73 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write(';\n')
             file.write('@end')
 
+    def export_light(self, lamp, **kwargs):
+        header_file_path = os.path.join(kwargs['dir'], '%s.h' % class_name(kwargs['name']))
+        with open(header_file_path, "w+t", encoding="utf8", newline="\n") as file:
+            file.write('#import "GLProgram.h"\n\n')
+            file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(kwargs['name']))
+            file.write('\tint m_lightId;\n'
+                       '\tfloat m_lightEnergy;\n'
+                       '\tGLKMatrix4 m_modelMatrix;\n')
+            file.write('}\n\n')
+            file.write('@property (nonatomic) float lightEnergy;\n')
+            file.write('@property (nonatomic) GLKMatrix4 modelMatrix;\n\n')
+            # for action in actions:
+            #     file.write('-(void)%s:(float)t;\n' % action.name)
+            file.write('@end\n\n')
+
+        source_file_path = os.path.join(kwargs['dir'], '%s.m' % class_name(kwargs['name']))
+        with open(source_file_path, "w+t", encoding="utf8", newline="\n") as file:
+            file.write('#import "%s.h"\n\n' % class_name(kwargs['name']))
+            file.write('#import "Math.h"\n\n')
+            file.write('static const BFPointLight k%sLight = {\n%s\n};\n\n' % (class_name(kwargs['name']), struct_to_string(light_to_struct(lamp), '\t')))
+            file.write('@implementation %s\n\n'
+                       '-(id)init\n'
+                       '{\n'
+                       '\tself = [super init];\n'
+                       '\tif (self)\n'
+                       '\t{\n'
+                       '\t\tm_lightId = [StaticCounter count];\n'
+                       '\t\tm_lightEnergy = %.2f;\n'
+                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n' % (class_name(kwargs['name']), lamp.energy))
+            file.write('\t}\n\n'
+                       '\treturn self;\n'
+                       '}\n\n')
+            file.write('-(void)dealloc\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)beforeDraw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '\tGLKVector3 lightPosition = GLKMatrix4MultiplyVector3(m_modelMatrix, GLKVector3MakeWithArray(k%sLight.position));\n\n' % class_name(kwargs['name']))
+            file.write('\tGLint enable    = [program uniform:[NSString stringWithFormat:@"enabledLights[%d]", m_lightId]];\n'
+                       '\tGLint position  = [program uniform:[NSString stringWithFormat:@"lights[%d].position", m_lightId]];\n'
+                       '\tGLint ambient   = [program uniform:[NSString stringWithFormat:@"lights[%d].ambientColor", m_lightId]];\n'
+                       '\tGLint diffuse   = [program uniform:[NSString stringWithFormat:@"lights[%d].diffuseColor", m_lightId]];\n'
+                       '\tGLint specular  = [program uniform:[NSString stringWithFormat:@"lights[%d].specularColor", m_lightId]];\n'
+                       '\tGLint constant  = [program uniform:[NSString stringWithFormat:@"lights[%d].constant", m_lightId]];\n'
+                       '\tGLint linear    = [program uniform:[NSString stringWithFormat:@"lights[%d].linear", m_lightId]];\n'
+                       '\tGLint quadratic = [program uniform:[NSString stringWithFormat:@"lights[%d].quadratic", m_lightId]];\n'
+                       '\n')
+            file.write('\t\tglUniform1i(enable, 1);\n'
+                       '\t\tglUniform1f(constant, k%sLight.constant);\n'
+                       '\t\tglUniform1f(linear, k%sLight.linear);\n'
+                       '\t\tglUniform1f(quadratic, k%sLight.quadratic);\n'
+                       '\t\tglUniform3fv(position, 1, lightPosition.v);\n'
+                       '\t\tglUniform3fv(ambient, 1, k%sLight.ambientColor);\n'
+                       '\t\tglUniform3fv(diffuse, 1, k%sLight.diffuseColor);\n'
+                       '\t\tglUniform3fv(specular, 1, k%sLight.specularColor);\n'
+                       '}\n\n' % (class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name']),
+                                  class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name'])))
+            file.write('-(void)afterDraw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('-(void)draw:(BFGLProgram *)program\n'
+                       '{\n'
+                       '}\n\n')
+            file.write('@synthesize modelMatrix = m_modelMatrix,\n'
+                       '            lightEnergy = m_lightEnergy;\n')
+            file.write('@end')
+
     def export_mesh(self, mesh, **kwargs):
         mesh_triangulate(mesh)
         mesh.calc_normals_split()
@@ -779,15 +861,15 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         for polygon in mesh.polygons:
             indices_count += polygon.loop_total
 
-        indices_str = '\n\t\t\t'
+        indices_str = '\n\t'
         for polygon in mesh.polygons:
-            indices_str += ', '.join(('%d' % mesh.loops[i].vertex_index for i in polygon.loop_indices)) + ',\n\t\t\t'
+            indices_str += ', '.join(('%d' % mesh.loops[i].vertex_index for i in polygon.loop_indices)) + ',\n\t'
 
-        indices_str = indices_str[:-5] + '\n\t\t'
+        indices_str = indices_str[:-3] + '\n'
 
         vertex_count = len(mesh.vertices)
 
-        vertexes_str = '\n\t\t\t'
+        vertexes_str = '\n\t'
         for vertex in mesh.vertices:
             row_data = '{%s}' % (', '.join(('%.6f' % co for co in vertex.co)))
             if self.prop_export_color and not self.prop_export_as_color_map:
@@ -797,9 +879,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             if self.prop_export_texture:
                 row_data += ', {%.3f, %.3f}' % (0.0, 0.0)
 
-            vertexes_str += '{%s},\n\t\t\t' % row_data
+            vertexes_str += '{%s},\n\t' % row_data
 
-        vertexes_str = vertexes_str[:-5] + '\n\t\t'
+        vertexes_str = vertexes_str[:-3] + '\n'
 
         #Добавить карту цветов и, возможно, карту нормалей, которую можно генерировать прям в блендоре
 
@@ -814,8 +896,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('#import "GLProgram.h"\n\n')
             file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(kwargs['name']))
             file.write('\tGLKMatrix4 m_modelMatrix;\n')
-            if kwargs['material']:
-                file.write('\tBFMaterial m_material;\n')
+            # if kwargs['material']:
+            #     file.write('\tBFMaterial m_material;\n')
             # file.write('\tconst GLuint m_Indices[%d];\n' % indices_count)
             # file.write('\tconst BFVertex m_Vertexes[%d];\n' % vertex_count)
 
@@ -832,8 +914,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         with open(source_file_path, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "%s.h"\n\n' % class_name(kwargs['name']))
             file.write('#import "Math.h"\n\n')
-            file.write('static const GLuint m_Indices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
-            file.write('static const BFVertex m_Vertexes%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
+            file.write('static const GLuint kIndices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
+            file.write('static const BFVertex kVertexes%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
+            if kwargs['material']:
+                material = kwargs['material']
+                file.write('static const BFMaterial k%sMaterial = {\n%s\n};\n\n' % (material.name, struct_to_string(material_to_struct(material), '\t')))
             file.write('@implementation %s\n\n'
                        '-(id)init\n'
                        '{\n'
@@ -841,8 +926,6 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '\tif (self)\n'
                        '\t{\n'
                        '\t\tm_modelMatrix = GLKMatrix4Identity;\n' % class_name(kwargs['name']))
-            if kwargs['material']:
-                file.write('\t\tm_material = (BFMaterial){\n%s};\n' % struct_to_string(material_to_struct(kwargs['material']), '\t' + ' ' * 26))
             file.write('\t}\n\n'
                        '\treturn self;\n'
                        '}\n\n')
@@ -869,6 +952,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        # '\t\tglEnableVertexAttribArray(texCoord);\n
                        '\n')
             if kwargs['material']:
+                material = kwargs['material']
                 file.write('\t@try\n'
                            '\t{\n'
                            '\t\tGLint materialAmbientColor  = [program uniform:@"material.ambientColor"];\n'
@@ -876,16 +960,16 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                            '\t\tGLint materialSpecularColor = [program uniform:@"material.specularColor"];\n'
                            '\t\tGLint materialEmissionColor = [program uniform:@"material.emissionColor"];\n'
                            '\n'
-                           '\t\tglUniform4fv(materialAmbientColor, 1, m_material.ambientColor);\n'
-                           '\t\tglUniform4fv(materialDiffuseColor, 1, m_material.diffuseColor);\n'
-                           '\t\tglUniform4fv(materialSpecularColor, 1, m_material.specularColor);\n'
-                           '\t\tglUniform4fv(materialEmissionColor, 1, m_material.emissionColor);\n'
-                           '\t}\n'
-                           '\t@catch(NSException *e) { NSLog(@"Exception %@ rises with reason: %@", [e name], [e reason]); }\n\n')
+                           '\t\tglUniform4fv(materialAmbientColor,  1, (const GLfloat *)&k%sMaterial.ambientColor);\n'
+                           '\t\tglUniform4fv(materialDiffuseColor,  1, (const GLfloat *)&k%sMaterial.diffuseColor);\n'
+                           '\t\tglUniform4fv(materialSpecularColor, 1, (const GLfloat *)&k%sMaterial.specularColor);\n'
+                           '\t\tglUniform4fv(materialEmissionColor, 1, (const GLfloat *)&k%sMaterial.emissionColor);\n'
+                           '\t}\n' % (material.name, material.name, material.name, material.name))
+                file.write('\t@catch(NSException *e) { NSLog(@"Exception %@ rises with reason: %@", [e name], [e reason]); }\n\n')
             file.write('\tglUniformMatrix4fv(matrix, 1, 0, m_modelMatrix.m);\n'
-                       '\tglVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].coord);\n'
-                       '\tglVertexAttribPointer(normal, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &m_Vertexes%s[0].normal);\n\n'
-                       '\tglDrawElements(GL_TRIANGLES, sizeof(m_Indices%s)/sizeof(GLuint), GL_UNSIGNED_INT, m_Indices%s);\n'
+                       '\tglVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &kVertexes%s[0].coord);\n'
+                       '\tglVertexAttribPointer(normal, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &kVertexes%s[0].normal);\n\n'
+                       '\tglDrawElements(GL_TRIANGLES, sizeof(kIndices%s)/sizeof(GLuint), GL_UNSIGNED_INT, kIndices%s);\n'
                        '}\n\n' % (class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name'])))
             file.write('@synthesize modelMatrix = m_modelMatrix;\n\n')
             file.write('@end')

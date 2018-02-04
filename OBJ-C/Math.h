@@ -63,19 +63,40 @@ typedef BFVertex * BFVertexRef;
 
 typedef struct __attribute__((packed))
 {
-    BFColorRGB ambient;
-    BFColorRGB diffuse;
-    BFColorRGB specular;
+    BFColorRGBA ambientColor;
+    BFColorRGBA diffuseColor;
+    BFColorRGBA specularColor;
+    BFColorRGBA emissionColor;
     float shininess;
 } BFMaterial;
 
 typedef struct __attribute__((packed))
 {
-    BFPoint3D position;
-    BFColorRGB ambient;
-    BFColorRGB diffuse;
-    BFColorRGB specular;
-} BFLight;
+    BFPoint3D direction;
+    BFColorRGB ambientColor;
+    BFColorRGB diffuseColor;
+    BFColorRGB specularColor;
+    float energy;
+} BFDirectLight;
+
+typedef struct __attribute__((packed))
+{
+    float position[3];
+    float ambientColor[3];
+    float diffuseColor[3];
+    float specularColor[3];
+    float constant;
+    float linear;
+    float quadratic;
+    float energy;
+} BFPointLight;
+
+@interface StaticCounter : NSObject
+
++(int)count;
++(void)reset;
+
+@end
 
 @interface BFValue : NSObject
 {
