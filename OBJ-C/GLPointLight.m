@@ -6,17 +6,18 @@
 //  Copyright (c) 2018 Rapotkin. All rights reserved.
 //
 
-#import "Math.h"
 #import "GLPointLight.h"
 
 @implementation BFGLPointLight
+
+static int LightCount = 0;
 
 -(id)init
 {
 	self = [super init];
 	if (self)
 	{
-		m_lightId = [StaticCounter count];
+		m_lightId = ++LightCount;
         m_isLightOn = YES;
 		m_lightEnergy = 1.0;
 	}

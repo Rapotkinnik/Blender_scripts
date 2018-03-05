@@ -27,16 +27,10 @@
         m_view = view;
         m_buffer = NULL;
         
-        GLenum error = glGetError();
-        
         glGenTextures(1, &m_selfTexture);
         glGenFramebuffers(1, &m_framebuffer);
         
-        error = glGetError();
-        
         [self setTexture:m_selfTexture];
-        
-        error = glGetError();
     }
     
     return self;
