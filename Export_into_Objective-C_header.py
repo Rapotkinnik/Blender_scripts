@@ -705,9 +705,18 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         with open(scene_source_file_name, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "%s.h"\n\n' % class_name(scene.name))
 
+            bound_box = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # left, right, botom, top, near, far
             for obj in objects:
-                matrix = matrix_to_string(kwargs['global_matrix'] * obj.matrix_world, '\t')
+                matrix = matrix_to_string(kwargs['global_matrix'] * obj.matrix_basis, '\t')
                 file.write('float %sModelMatrix[16] = {\n%s\n};\n\n' % (class_name(obj.name), matrix))
+
+                for i in range(8):
+                    bound_box[0] = min(obj.bound_box[i][0] * 1.1, bound_box[0])
+                    bound_box[1] = max(obj.bound_box[i][0] * 1.1, bound_box[1])
+                    bound_box[2] = min(obj.bound_box[i][1] * 1.1, bound_box[2])
+                    bound_box[3] = max(obj.bound_box[i][1] * 1.1, bound_box[3])
+                    bound_box[4] = min(obj.bound_box[i][2] * 1.1, bound_box[4])
+                    bound_box[5] = max(obj.bound_box[i][2] * 1.1, bound_box[5])
 
             render = scene.render
             camera = scene.camera
@@ -731,7 +740,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 file.write('\t\tm_%s = [[%s alloc] init];\n' % (member_name(obj.name), class_name(obj.name)))
             file.write('\n')
             for obj in objects:
-                file.write('\t\t[m_%s setModelMatrix: GLKMatrix4MakeWithArray(%sModelMatrix)];\n' % (member_name(obj.name), class_name(obj.name)))
+                file.write('\t\t[m_%s setModelMatrix: GLKMatrix4MakeWithArrayAndTranspose(%sModelMatrix)];\n' % (member_name(obj.name), class_name(obj.name)))
             file.write('\t}\n\n'
                        '\treturn self;\n'
                        '}\n\n')
@@ -740,12 +749,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '}\n\n')
             file.write('-(void)resetGlobalMatrix\n'
                        '{\n')
-            if camera.type == 'ORTHO':
-                file.write('\t//TODO: float aspect = width()/height();')
-                file.write('\tGLKMatrix4 projectionMatrix = GLKMatrix4MakeOrtho(-1, 1, -1, 1, -1, 1);\n')  # camera.shift_x!
-                file.write('\tprojectionMatrix = GLKMatrix4Scale(projectionMatrix, %.6f, %.6f, %.6f);\n' % (
-                    camera.ortho_scale, camera.ortho_scale, camera.ortho_scale))
-            if camera.type == 'PERSP':
+            if camera.data.type == 'ORTHO':
+                file.write('\t//TODO: float aspect = width()/height();\n')
+                file.write('\tGLKMatrix4 projectionMatrix = GLKMatrix4MakeOrtho(%s);\n' %
+                           ', '.join(('%.4f' % (val * camera.data.ortho_scale) for val in bound_box)))  # camera.shift_x!
+            if camera.data.type == 'PERSP':
                 # camera.angle if camera.lens if camera.lens_unit
                 file.write('\tGLKMatrix4 projectionMatrix = GLKMatrix4MakePerspective(%s)' % '')  # GLKMatrix4MakeFrustum?
             file.write('\tGLKMatrix4 viewMatrix = GLKMatrix4MakeLookAt(%s);\n\n' % matrix_to_string(vp_matrix, '\t' + ' ' * 38, False))
