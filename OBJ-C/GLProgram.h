@@ -55,6 +55,7 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
     GLuint m_program;
     GLuint m_vertexArray;
     GLuint m_vertexBuffer;
+    NSDate *m_timeLastDraw;
     NSMutableArray *m_customizers;
     NSMutableDictionary *m_attribs;
     NSMutableDictionary *m_uniforms;
@@ -75,6 +76,7 @@ typedef void(^BFGLFunctor)(BFGLProgram *program);
 -(void)drawFunctor:(BFGLFunctor)functor;
 -(void)drawFunctors:(NSArray *)functors;
 -(void)drawObjects:(NSArray *)objects;
+-(NSTimeInterval)timeSinceLastDraw;
 -(GLint)attribute:(NSString *)name;
 -(GLint)uniform:(NSString *)name;
 

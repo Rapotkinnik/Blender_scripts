@@ -10,7 +10,7 @@
 
 @implementation TextureHolder
 
--(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
+-(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
 {
     self = [super init];
     if (self)
@@ -25,12 +25,13 @@
         m_texture = [texture name];
         m_rowCount = row;
         m_columnCount = column;
+        m_duration = duration;
     }
     
     return self;
 }
 
--(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
+-(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
 {
     self = [super init];
     if (self)
@@ -45,19 +46,20 @@
         m_texture = [texture name];
         m_rowCount = row;
         m_columnCount = column;
+        m_duration = duration;
     }
     
     return self;
 }
 
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
++(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
 {
-    return [[[self class] alloc] initWithContentsOfFile:path RowCount:row ColumnCount:column];
+    return [[[self class] alloc] initWithContentsOfFile:path RowCount:row ColumnCount:column Duration:duration];
 }
 
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
++(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
 {
-    return [[[self class] alloc] initWithContentsOfData:data RowCount:row ColumnCount:column];
+    return [[[self class] alloc] initWithContentsOfData:data RowCount:row ColumnCount:column Duration:duration];
 }
 
 -(void)dealloc
@@ -65,7 +67,7 @@
     glDeleteTextures(1, &m_texture);
 }
 
-@synthesize texture = m_texture, rowCount = m_rowCount, columnCount = m_columnCount;
+@synthesize texture = m_texture, rowCount = m_rowCount, columnCount = m_columnCount, duration = m_duration;
 
 @end
 
@@ -90,7 +92,9 @@
     self = [super init];
     if (self)
     {
+        m_drawTime = 0;
         m_sets = [NSMutableDictionary dictionary];
+        m_modelMatrix = GLKMatrix4Identity;
         
         memcpy(m_indices, indices, sizeof(m_indices));
         memcpy(m_vertexes, vertexes, sizeof(m_vertexes));
@@ -122,27 +126,30 @@
     [m_sets setObject:holder forKey:[[NSNumber numberWithInt:set] stringValue]];
 }
 
--(void)setActiveTexture:(UInt32)activeTexture
+-(GLuint)getActiveTexture:(NSTimeInterval)sinceLastDraw
 {
     TextureHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:m_activeSet] stringValue]];
     if (!holder)
-        return;
+        return 0;
     
-    if (activeTexture > [holder rowCount] * [holder columnCount])
-        return;
+    m_drawTime += sinceLastDraw;
+    if (m_drawTime >= [holder duration])
+        m_drawTime -= [holder duration];
     
-    m_activeTexture = activeTexture;
+    UInt32 activeTexture = [holder rowCount] * [holder columnCount] * m_drawTime / [holder duration];
     
     GLfloat rowStep = 1.0 / [holder rowCount];
     GLfloat columnStep = 1.0 / [holder columnCount];
     
-    UInt16 row = m_activeTexture / [holder columnCount];
-    UInt16 column = m_activeTexture - row * [holder columnCount];
+    UInt16 row = activeTexture / [holder columnCount];
+    UInt16 column = activeTexture - row * [holder columnCount];
     
     m_uvCoord[0] = (BFPointUV){rowStep * (row + 0), columnStep * (column + 0)};
     m_uvCoord[1] = (BFPointUV){rowStep * (row + 1), columnStep * (column + 0)};
     m_uvCoord[2] = (BFPointUV){rowStep * (row + 1), columnStep * (column + 1)};
     m_uvCoord[3] = (BFPointUV){rowStep * (row + 0), columnStep * (column + 1)};
+    
+    return [holder texture];
 }
 
 -(void)beforeDraw:(BFGLProgram *)program
@@ -158,7 +165,7 @@
     if ([self activeTextureSet] == NotDrawing)
         return;
     
-    GLuint texture = [self getTextureFor:[self activeTextureSet]];
+    GLuint texture = [self getActiveTexture:[program timeSinceLastDraw]];
     if (!texture)
         return;
     
@@ -168,10 +175,15 @@
     GLint positionAttr = [program attribute:@"position"];
     GLint uvCoordAttr = [program attribute:@"texCoord"];
     
-    GLint textureUniform = [program uniform:@"texture"];
+    GLint textureUniform = [program uniform:@"objTexture"];
+    GLint useTextureUniform = [program uniform:@"useTexture"];
     GLint modelMatrixUniform = [program uniform:@"modelMatrix"];
     
+    glEnableVertexAttribArray(positionAttr);
+	glEnableVertexAttribArray(uvCoordAttr);
+    
     glUniform1i(textureUniform, 0);
+    glUniform1i(useTextureUniform, 1);
     glUniformMatrix4fv(modelMatrixUniform, 1, 0, [self modelMatrix].m);
     
     glVertexAttribPointer(positionAttr, 3, GL_FLOAT, GL_FALSE, 0, m_vertexes);
@@ -179,9 +191,13 @@
     
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, m_indices);
     
+    glUniform1i(useTextureUniform, 0);
+    glDisableVertexAttribArray(positionAttr);
+	glDisableVertexAttribArray(uvCoordAttr);
+    
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-@synthesize activeTexture = m_activeTexture, activeTextureSet = m_activeSet;
+@synthesize modelMatrix = m_modelMatrix, activeTextureSet = m_activeSet;
 
 @end

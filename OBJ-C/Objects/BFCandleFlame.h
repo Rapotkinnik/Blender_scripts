@@ -29,26 +29,29 @@ typedef enum
     GLuint m_texture;
     UInt16 m_rowCount;
     UInt16 m_columnCount;
+    NSTimeInterval m_duration;
 }
 
--(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
--(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
+-(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
+-(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
++(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
++(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
 
 @property(nonatomic, readonly) GLuint texture;
 @property(nonatomic, readonly) UInt16 rowCount;
 @property(nonatomic, readonly) UInt16 columnCount;
+@property(nonatomic, readonly) NSTimeInterval duration;
 
 @end
 
 @interface BFCandleFlame : NSObject <BFGLDrawable>
 {
-    UInt32 m_activeTexture;
     GLubyte m_indices[6];
     BFPointUV m_uvCoord[4];
     BFPoint3D m_vertexes[4];
     TextureSets m_activeSet;
+    GLKMatrix4 m_modelMatrix;
+    NSTimeInterval m_drawTime;
     
     NSMutableDictionary *m_sets;
 }
@@ -59,7 +62,6 @@ typedef enum
 -(UInt32)getTextureCountFor:(TextureSets)set;
 -(void)setTexture:(TextureHolder *)holder For:(TextureSets)set;
 
-@property(nonatomic) UInt32 activeTexture;
 @property(nonatomic) GLKMatrix4 modelMatrix;
 @property(nonatomic) TextureSets activeTextureSet;
 

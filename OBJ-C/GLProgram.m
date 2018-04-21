@@ -206,6 +206,8 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
             [customizer setProgram:self];
             [customizer preparation];
         }
+        
+        m_timeLastDraw = [NSDate date];
     }
     
     return self;
@@ -311,6 +313,8 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
         glDisableVertexAttribArray([value integerValue]);
 
     glUseProgram(prev_program);
+    
+    m_timeLastDraw = [NSDate date];
 }
 
 -(void)drawFunctors:(NSArray *)functors
@@ -335,6 +339,8 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
         glDisableVertexAttribArray([value integerValue]);
     
     glUseProgram(prev_program);
+    
+    m_timeLastDraw = [NSDate date];
 }
 
 -(void)drawObjects:(NSArray *)objects
@@ -365,6 +371,13 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
         glDisableVertexAttribArray([value integerValue]);
     
     glUseProgram(prev_program);
+    
+    m_timeLastDraw = [NSDate date];
+}
+
+-(NSTimeInterval)timeSinceLastDraw
+{
+    return [[NSDate date] timeIntervalSinceDate:m_timeLastDraw];
 }
 
 -(GLint)attribute:(NSString *)name
