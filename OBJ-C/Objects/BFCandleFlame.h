@@ -24,6 +24,25 @@ typedef enum
     SetsCount
 } TextureSets;
 
+@protocol ChangeTextureStrategy <NSObject>
+
+-(UInt32)activeTextureOn:(NSTimeInterval)timeSinceLastDraw In:(UInt32)textureCount;
+
+@end
+
+@interface LinearCircularStrategy : NSObject <ChangeTextureStrategy>
+{
+    NSTimeInterval m_drawTime;
+    NSTimeInterval m_frameDuration;
+}
+
+-(id)initWithFrameDuration:(NSTimeInterval)duration;
++(instancetype)linearCircularStrategyWithFrameDuration:(NSTimeInterval)duration;
+
+@end
+
+// TODO: Добавить стратегии для изменения активной текстуры : циклическая, туда-сюдак, туда и колебание около послденй, сюда + колебание около первой
+
 @interface TextureHolder : NSObject
 {
     GLuint m_texture;
@@ -32,10 +51,10 @@ typedef enum
     NSTimeInterval m_duration;
 }
 
--(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
--(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration;
+-(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
+-(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
++(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
++(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
 
 @property(nonatomic, readonly) GLuint texture;
 @property(nonatomic, readonly) UInt16 rowCount;
@@ -51,9 +70,9 @@ typedef enum
     BFPoint3D m_vertexes[4];
     TextureSets m_activeSet;
     GLKMatrix4 m_modelMatrix;
-    NSTimeInterval m_drawTime;
     
     NSMutableDictionary *m_sets;
+    id<ChangeTextureStrategy> m_strategy;
 }
 
 -(id)initWithVertexes:(const GLfloat[12])vertexes Indices:(const GLubyte[6])indices;
@@ -64,5 +83,6 @@ typedef enum
 
 @property(nonatomic) GLKMatrix4 modelMatrix;
 @property(nonatomic) TextureSets activeTextureSet;
+@property(nonatomic) id<ChangeTextureStrategy> activeStrategy;
 
 @end

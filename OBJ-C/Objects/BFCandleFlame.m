@@ -8,15 +8,49 @@
 
 #import "BFCandleFlame.h"
 
+static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного кадра при 15 кадрах в секунду
+
+@implementation LinearCircularStrategy
+
+-(id)initWithFrameDuration:(NSTimeInterval)duration
+{
+    self = [super init];
+    if (self)
+    {
+        m_frameDuration = duration;
+    }
+    
+    return self;
+}
+
++(instancetype)linearCircularStrategyWithFrameDuration:(NSTimeInterval)duration
+{
+    return [[[self class] alloc] initWithFrameDuration:duration];
+}
+
+-(UInt32)activeTextureOn:(NSTimeInterval)timeSinceLastDraw In:(UInt32)textureCount
+{
+    
+    NSTimeInterval duration = textureCount * m_frameDuration;
+    m_drawTime += timeSinceLastDraw;
+    if (m_drawTime >= duration)
+        m_drawTime -= duration;
+    
+    return textureCount * m_drawTime / duration;
+}
+
+@end
+
 @implementation TextureHolder
 
--(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
+-(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
     self = [super init];
     if (self)
     {
         NSError *error;
-        GLKTextureInfo *texture = [GLKTextureLoader textureWithContentsOfData:data options:nil error:&error];
+        NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:GLKTextureLoaderOriginBottomLeft, [NSNumber numberWithBool:YES], nil];
+        GLKTextureInfo *texture = [GLKTextureLoader textureWithContentsOfData:data options:options error:&error];
         if (!texture)
             @throw [NSException exceptionWithName:@"TextureLoadingException"
                                            reason:[NSString stringWithFormat:@"Can't load texture from data with error code :%d", [error code]]
@@ -25,19 +59,20 @@
         m_texture = [texture name];
         m_rowCount = row;
         m_columnCount = column;
-        m_duration = duration;
+        m_duration = kFrameDuration * row * column;
     }
     
     return self;
 }
 
--(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
+-(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
     self = [super init];
     if (self)
     {
         NSError *error;
-        GLKTextureInfo *texture = [GLKTextureLoader textureWithContentsOfFile:path options:nil error:&error];
+        NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:GLKTextureLoaderOriginBottomLeft, [NSNumber numberWithBool:YES], nil];
+        GLKTextureInfo *texture = [GLKTextureLoader textureWithContentsOfFile:path options:options error:&error];
         if (!texture)
             @throw [NSException exceptionWithName:@"TextureLoadingException"
                                            reason:[NSString stringWithFormat:@"Can't load texture from file %@ with error code :%d", path, [error code]]
@@ -46,20 +81,20 @@
         m_texture = [texture name];
         m_rowCount = row;
         m_columnCount = column;
-        m_duration = duration;
+        m_duration = kFrameDuration * row * column;
     }
     
     return self;
 }
 
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
++(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
-    return [[[self class] alloc] initWithContentsOfFile:path RowCount:row ColumnCount:column Duration:duration];
+    return [[[self class] alloc] initWithContentsOfFile:path RowCount:row ColumnCount:column];
 }
 
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column Duration:(NSTimeInterval)duration
++(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
-    return [[[self class] alloc] initWithContentsOfData:data RowCount:row ColumnCount:column Duration:duration];
+    return [[[self class] alloc] initWithContentsOfData:data RowCount:row ColumnCount:column];
 }
 
 -(void)dealloc
@@ -92,9 +127,9 @@
     self = [super init];
     if (self)
     {
-        m_drawTime = 0;
         m_sets = [NSMutableDictionary dictionary];
         m_modelMatrix = GLKMatrix4Identity;
+        m_strategy = [LinearCircularStrategy linearCircularStrategyWithFrameDuration:kFrameDuration];
         
         memcpy(m_indices, indices, sizeof(m_indices));
         memcpy(m_vertexes, vertexes, sizeof(m_vertexes));
@@ -132,11 +167,7 @@
     if (!holder)
         return 0;
     
-    m_drawTime += sinceLastDraw;
-    if (m_drawTime >= [holder duration])
-        m_drawTime -= [holder duration];
-    
-    UInt32 activeTexture = [holder rowCount] * [holder columnCount] * m_drawTime / [holder duration];
+    UInt32 activeTexture = [m_strategy activeTextureOn:sinceLastDraw In:[holder rowCount] * [holder columnCount]];
     
     GLfloat rowStep = 1.0 / [holder rowCount];
     GLfloat columnStep = 1.0 / [holder columnCount];
@@ -144,10 +175,10 @@
     UInt16 row = activeTexture / [holder columnCount];
     UInt16 column = activeTexture - row * [holder columnCount];
     
-    m_uvCoord[0] = (BFPointUV){rowStep * (row + 0), columnStep * (column + 0)};
-    m_uvCoord[1] = (BFPointUV){rowStep * (row + 1), columnStep * (column + 0)};
-    m_uvCoord[2] = (BFPointUV){rowStep * (row + 1), columnStep * (column + 1)};
-    m_uvCoord[3] = (BFPointUV){rowStep * (row + 0), columnStep * (column + 1)};
+    m_uvCoord[0] = (BFPointUV){columnStep * (column + 1), rowStep * (row + 1)};
+    m_uvCoord[1] = (BFPointUV){columnStep * (column + 1), rowStep * (row + 0)};
+    m_uvCoord[2] = (BFPointUV){columnStep * (column + 0), rowStep * (row + 0)};
+    m_uvCoord[3] = (BFPointUV){columnStep * (column + 0), rowStep * (row + 1)};
     
     return [holder texture];
 }
@@ -198,6 +229,6 @@
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-@synthesize modelMatrix = m_modelMatrix, activeTextureSet = m_activeSet;
+@synthesize modelMatrix = m_modelMatrix, activeTextureSet = m_activeSet, activeStrategy = m_strategy;
 
 @end
