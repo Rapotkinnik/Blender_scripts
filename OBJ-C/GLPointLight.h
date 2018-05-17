@@ -6,11 +6,12 @@
 //  Copyright (c) 2018 Rapotkin. All rights reserved.
 //
 
+#import "Math.h"
 #import "GLProgram.h"
 
 @interface BFGLPointLight : NSObject <BFGLDrawable>
 {
-	int m_lightId;
+    int m_lightID;
     BOOL m_isLightOn;
 	float m_lightEnergy;
     GLKVector3 m_position;
@@ -26,6 +27,7 @@
                              Specular:(GLKVector3)specular
                           Attenuation:(GLKVector3)attenuation;
 
+@property (nonatomic, assign) int lightID;
 @property (nonatomic, assign) BOOL isLightOn;
 @property (nonatomic, assign) float lightEnergy;
 @property (nonatomic, assign) GLKVector3 position;

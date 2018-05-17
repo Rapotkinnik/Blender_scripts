@@ -43,7 +43,7 @@ typedef enum
 
 // TODO: Добавить стратегии для изменения активной текстуры : циклическая, туда-сюдак, туда и колебание около послденй, сюда + колебание около первой
 
-@interface TextureHolder : NSObject
+@interface SpriteSheetHolder : NSObject
 {
     GLuint m_texture;
     UInt16 m_rowCount;
@@ -53,8 +53,8 @@ typedef enum
 
 -(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
 -(id)initWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
++(instancetype)spritesheetHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column;
++(instancetype)spritesheetHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column;
 
 @property(nonatomic, readonly) GLuint texture;
 @property(nonatomic, readonly) UInt16 rowCount;
@@ -79,7 +79,7 @@ typedef enum
 
 -(GLuint)getTextureFor:(TextureSets)set;
 -(UInt32)getTextureCountFor:(TextureSets)set;
--(void)setTexture:(TextureHolder *)holder For:(TextureSets)set;
+-(void)setTexture:(SpriteSheetHolder *)holder For:(TextureSets)set;
 
 @property(nonatomic) GLKMatrix4 modelMatrix;
 @property(nonatomic) TextureSets activeTextureSet;

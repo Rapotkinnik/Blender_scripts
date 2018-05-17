@@ -81,19 +81,20 @@ static const float MACHINE_EPSILON = 2e-54;
 
 @end
 
-@implementation StaticCounter
+@implementation BFCountableObject
 
-static int m_count;
+static int ObjectCount = 0;
 
-+(int)count
+-(id)init
 {
-    return m_count++;
+    self = [super init];
+    if (self)
+        m_objectID = ++ObjectCount;
+    
+    return self;
 }
 
-+(void)reset
-{
-    m_count = 0;
-}
+@synthesize objectID = m_objectID;
 
 @end
 

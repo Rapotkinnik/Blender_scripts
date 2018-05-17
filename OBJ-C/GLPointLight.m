@@ -10,14 +10,14 @@
 
 @implementation BFGLPointLight
 
-static int LightCount = 0;
+static int ObjectCount = 0;
 
 -(id)init
 {
 	self = [super init];
 	if (self)
 	{
-		m_lightId = ++LightCount;
+        m_lightID = ++ObjectCount;
         m_isLightOn = YES;
 		m_lightEnergy = 1.0;
 	}
@@ -47,30 +47,41 @@ static int LightCount = 0;
 
 -(void)beforeDraw:(BFGLProgram *)program
 {
-	GLint isOn        = [program uniform:[NSString stringWithFormat:@"pointLights[%d].isOn", m_lightId]];
-	GLint position    = [program uniform:[NSString stringWithFormat:@"pointLights[%d].position", m_lightId]];
-	GLint ambient     = [program uniform:[NSString stringWithFormat:@"pointLights[%d].ambientColor", m_lightId]];
-	GLint diffuse     = [program uniform:[NSString stringWithFormat:@"pointLights[%d].diffuseColor", m_lightId]];
-	GLint specular    = [program uniform:[NSString stringWithFormat:@"pointLights[%d].specularColor", m_lightId]];
-	GLint attenuation = [program uniform:[NSString stringWithFormat:@"pointLights[%d].attenuation", m_lightId]];
+    @try
+    {
+        GLint isOn        = [program uniform:[NSString stringWithFormat:@"pointLights[%d].isOn",          m_lightID]];
+        GLint position    = [program uniform:[NSString stringWithFormat:@"pointLights[%d].position",      m_lightID]];
+        GLint ambient     = [program uniform:[NSString stringWithFormat:@"pointLights[%d].ambientColor",  m_lightID]];
+        GLint diffuse     = [program uniform:[NSString stringWithFormat:@"pointLights[%d].diffuseColor",  m_lightID]];
+        GLint specular    = [program uniform:[NSString stringWithFormat:@"pointLights[%d].specularColor", m_lightID]];
+        GLint attenuation = [program uniform:[NSString stringWithFormat:@"pointLights[%d].attenuation",   m_lightID]];
 
-    glUniform1i(isOn, m_isLightOn ? 1 : 0);
-    glUniform3fv(position,    1, m_position.v);
-    glUniform3fv(ambient,     1, m_ambientColor.v);
-    glUniform3fv(diffuse,     1, m_diffuseColor.v);
-    glUniform3fv(specular,    1, m_specularColor.v);
-    glUniform3fv(attenuation, 1, m_lightAttenuation.v);
+        glUniform1i(isOn, m_isLightOn ? 1 : 0);
+        glUniform3fv(position,    1, m_position.v);
+        glUniform3fv(ambient,     1, m_ambientColor.v);
+        glUniform3fv(diffuse,     1, m_diffuseColor.v);
+        glUniform3fv(specular,    1, m_specularColor.v);
+        glUniform3fv(attenuation, 1, m_lightAttenuation.v);
+    }
+    @catch(NSException *){}
 }
 
 -(void)afterDraw:(BFGLProgram *)program
 {
+    @try
+    {
+        GLint isOn = [program uniform:[NSString stringWithFormat:@"pointLights[%d].isOn", m_lightID]];
+        glUniform1i(isOn, 0);
+    }
+    @catch(NSException *){}
 }
 
 -(void)draw:(BFGLProgram *)program
 {
 }
 
-@synthesize isLightOn = m_isLightOn,
+@synthesize lightID = m_lightID,
+            isLightOn = m_isLightOn,
             lightEnergy = m_lightEnergy,
             position = m_position,
             ambientColor = m_ambientColor,

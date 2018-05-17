@@ -10,24 +10,22 @@
 @interface BFGLDraw2Texture : NSObject <BFGLCustomizer>
 {
     CGRect m_view;
-    GLuint m_texture;
-    GLuint m_selfTexture;
     GLuint m_framebuffer;
     
-    GLint  m_lastTextre;
     GLint  m_lastFramebuffer;
     GLint  m_lastViewPort[4];
 
-    GLvoid *m_buffer;
     BFGLProgram *m_program;
+    NSMutableDictionary *m_attachments;
 }
 
 @property (nonatomic, readonly) CGRect view;
-@property (nonatomic, readwrite) GLuint texture;
 
--(instancetype)initWithView:(CGRect)view;
-+(instancetype)draw2TextureWithView:(CGRect)view;
+-(instancetype)initWithView:(CGRect)view Attachments:(const GLenum *)attachments;  // Список буферов с запирающим 0
++(instancetype)draw2TextureWithView:(CGRect)view Attachments:(const GLenum *)attachments;
 
--(void)bindBuffer:(GLvoid *)buffer;
+-(GLuint)getTextureForAttachment:(GLenum)attachment;
+-(void)setTexture:(GLenum)texture ForAttachment:(GLuint)attachment;
+-(void)setBuffer:(void *)buffer ForAttachment:(GLuint)attachment;
 
 @end  // BFGLDraw2Texture

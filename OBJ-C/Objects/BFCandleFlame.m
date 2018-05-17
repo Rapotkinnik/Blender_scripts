@@ -8,7 +8,7 @@
 
 #import "BFCandleFlame.h"
 
-static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного кадра при 15 кадрах в секунду
+static NSTimeInterval kFrameDuration = 1.0 / 30.0;  // Время одного кадра при 15 кадрах в секунду
 
 @implementation LinearCircularStrategy
 
@@ -41,7 +41,7 @@ static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного �
 
 @end
 
-@implementation TextureHolder
+@implementation SpriteSheetHolder
 
 -(id)initWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
@@ -87,12 +87,12 @@ static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного �
     return self;
 }
 
-+(instancetype)textureHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
++(instancetype)spritesheetHolderWithContentsOfFile:(NSString *)path RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
     return [[[self class] alloc] initWithContentsOfFile:path RowCount:row ColumnCount:column];
 }
 
-+(instancetype)textureHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
++(instancetype)spritesheetHolderWithContentsOfData:(NSData *)data RowCount:(UInt16)row ColumnCount:(UInt16)column
 {
     return [[[self class] alloc] initWithContentsOfData:data RowCount:row ColumnCount:column];
 }
@@ -140,7 +140,7 @@ static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного �
 
 -(GLuint)getTextureFor:(TextureSets)set
 {
-    TextureHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:set] stringValue]];
+    SpriteSheetHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:set] stringValue]];
     if (!holder)
         return 0;
     
@@ -149,21 +149,21 @@ static NSTimeInterval kFrameDuration = 1.0 / 15.0;  // Время одного �
 
 -(UInt32)getTextureCountFor:(TextureSets)set
 {
-    TextureHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:set] stringValue]];
+    SpriteSheetHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:set] stringValue]];
     if (!holder)
         return 0;
     
     return [holder rowCount] * [holder columnCount];
 }
 
--(void)setTexture:(TextureHolder *)holder For:(TextureSets)set
+-(void)setTexture:(SpriteSheetHolder *)holder For:(TextureSets)set
 {
     [m_sets setObject:holder forKey:[[NSNumber numberWithInt:set] stringValue]];
 }
 
 -(GLuint)getActiveTexture:(NSTimeInterval)sinceLastDraw
 {
-    TextureHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:m_activeSet] stringValue]];
+    SpriteSheetHolder *holder = [m_sets objectForKey:[[NSNumber numberWithInt:m_activeSet] stringValue]];
     if (!holder)
         return 0;
     

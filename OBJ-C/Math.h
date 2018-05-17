@@ -7,6 +7,8 @@
 
 #import <GLKit/GLKit.h>
 
+#define BUFFER_OFFSET(i) ((char *)NULL + (i))
+
 typedef struct
 {
     float x;
@@ -91,10 +93,12 @@ typedef struct __attribute__((packed))
     float energy;
 } BFPointLight;
 
-@interface StaticCounter : NSObject
+@interface BFCountableObject : NSObject
+{
+    int m_objectID;
+}
 
-+(int)count;
-+(void)reset;
+@property (nonatomic, readonly) int objectID;
 
 @end
 

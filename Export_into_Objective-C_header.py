@@ -691,12 +691,18 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('\tGLKMatrix4 m_globalMatrix;\n\n')
             for obj in objects:
                 file.write('\t%s *m_%s;\n' % (class_name(obj.name), member_name(obj.name)))
+
+            file.write('\n')
+            file.write('\tNSArray *m_lights;\n')
+            file.write('\tNSArray *m_objects;\n')
             file.write('}\n\n')
             file.write('-(void)resetGlobalMatrix;\n')
             file.write('-(void)scaleGlobalMatrix:(float[3])axisComps;\n')
             file.write('-(void)translateGlobalMatrix:(float[3])axisComps;\n')
             file.write('-(void)rotateGlobalMatrix:(float)radians AxisComps:(float[3])axisComps;\n\n')
             file.write('@property (nonatomic) GLKMatrix4 globalMatrix;\n')
+            file.write('@property (nonatomic, readonly) NSArray *lights;\n')
+            file.write('@property (nonatomic, readonly) NSArray *objects;\n')
             for obj in objects:
                 file.write('@property (nonatomic, readonly) %s *%s;\n' % (class_name(obj.name), member_name(obj.name)))
             file.write('\n')
@@ -705,7 +711,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         with open(scene_source_file_name, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "%s.h"\n\n' % class_name(scene.name))
 
-            bound_box = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # left, right, botom, top, near, far
+            bound_box = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # left, right, bottom, top, near, far
             for obj in objects:
                 matrix = matrix_to_string(kwargs['global_matrix'] * obj.matrix_basis, '\t')
                 file.write('float %sModelMatrix[16] = {\n%s\n};\n\n' % (class_name(obj.name), matrix))
@@ -740,7 +746,11 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                 file.write('\t\tm_%s = [[%s alloc] init];\n' % (member_name(obj.name), class_name(obj.name)))
             file.write('\n')
             for obj in objects:
-                file.write('\t\t[m_%s setModelMatrix: GLKMatrix4MakeWithArrayAndTranspose(%sModelMatrix)];\n' % (member_name(obj.name), class_name(obj.name)))
+                if obj.type != 'LAMP':
+                    file.write('\t\t[m_%s setModelMatrix: GLKMatrix4MakeWithArrayAndTranspose(%sModelMatrix)];\n' % (member_name(obj.name), class_name(obj.name)))
+            file.write('\n')
+            file.write('\t\tm_lights = [NSArray arrayWithObjects:%s, nil];\n' % ', '.join(('m_' + member_name(obj.name) for obj in objects if obj.type == 'LAMP')))
+            file.write('\t\tm_objects = [NSArray arrayWithObjects:%s, nil];\n' % ', '.join(('m_' + member_name(obj.name) for obj in objects if obj.type != 'LAMP')))
             file.write('\t}\n\n'
                        '\treturn self;\n'
                        '}\n\n')
@@ -789,7 +799,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             for obj in objects:
                 file.write('\t[m_%s draw:program];\n' % member_name(obj.name))
             file.write('}\n\n'
-                       '@synthesize globalMatrix = m_globalMatrix,\n')
+                       '@synthesize globalMatrix = m_globalMatrix,\n'
+                       '            lights = m_lights,\n'
+                       '            objects = m_objects,\n')
             for obj in objects:
                 file.write(' ' * 12 + '%s = m_%s,\n' % (member_name(obj.name), member_name(obj.name)))
 
@@ -870,6 +882,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
 
         #Добавить карту цветов и, возможно, карту нормалей, которую можно генерировать прям в блендоре
 
+        actions = []
         #Данные анимации - массив массивов (для каждого сплайна) массивов (для каждой точки) сплайнов
         # actions = [object.shape_keys.animation_data.action]
         # for track in surface.shape_keys.animation_data.nla_tracks:
@@ -880,7 +893,9 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         with open(header_file_path, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "GLProgram.h"\n\n')
             file.write('@interface %s: NSObject <BFGLDrawable>\n{\n' % class_name(kwargs['name']))
-            file.write('\tGLKMatrix4 m_modelMatrix;\n')
+            file.write('\tGLuint m_indexBuffer;\n'
+                       '\tGLuint m_vertexBuffer;\n'
+                       '\tGLKMatrix4 m_modelMatrix;\n')
             # if kwargs['material']:
             #     file.write('\tBFMaterial m_material;\n')
             # file.write('\tconst GLuint m_Indices[%d];\n' % indices_count)
@@ -898,7 +913,8 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
         source_file_path = os.path.join(kwargs['dir'], '%s.m' % class_name(kwargs['name']))
         with open(source_file_path, "w+t", encoding="utf8", newline="\n") as file:
             file.write('#import "%s.h"\n\n' % class_name(kwargs['name']))
-            file.write('#import "Math.h"\n\n')
+            file.write('#import "Math.h"\n'
+                       '#import "BFFinaly.h"\n\n')
             file.write('static const GLuint kIndices%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), indices_count, indices_str))
             file.write('static const BFVertex kVertexes%s[%d] = {%s};\n\n' % (class_name(kwargs['name']), vertex_count, vertexes_str))
             if kwargs['material']:
@@ -910,12 +926,24 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '\tself = [super init];\n'
                        '\tif (self)\n'
                        '\t{\n'
-                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n' % class_name(kwargs['name']))
-            file.write('\t}\n\n'
+                       '\t\tm_modelMatrix = GLKMatrix4Identity;\n\n' % class_name(kwargs['name']))
+            file.write('\t\tglGenBuffers(1, &m_indexBuffer);\n'
+                       '\t\tglGenBuffers(1, &m_vertexBuffer);\n\n'
+                       '\t\tglBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);\n'
+                       '\t\tglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBuffer);\n\n')
+            file.write('\t\tglBufferData(GL_ARRAY_BUFFER, sizeof(kVertexes%s), kVertexes%s, %s);\n'
+                       % (class_name(kwargs['name']), class_name(kwargs['name']), 'GL_DYNAMIC_DRAW' if len(actions) else 'GL_STATIC_DRAW'))
+            file.write('\t\tglBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kIndices%s), kIndices%s, GL_STATIC_DRAW);\n\n'
+                       % (class_name(kwargs['name']), class_name(kwargs['name'])))
+            file.write('\t\tglBindBuffer(GL_ARRAY_BUFFER, 0);\n'
+                       '\t\tglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);\n'
+                       '\t}\n\n'
                        '\treturn self;\n'
                        '}\n\n')
             file.write('-(void)dealloc\n'
                        '{\n'
+                       '\tglDeleteBuffers(1, &m_indexBuffer);\n'
+                       '\tglDeleteBuffers(1, &m_vertexBuffer);\n'
                        '}\n\n')
             file.write('-(void)beforeDraw:(BFGLProgram *)program\n'
                        '{\n'
@@ -925,42 +953,76 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
                        '}\n\n')
             file.write('-(void)draw:(BFGLProgram *)program\n'
                        '{\n'
-                       '\tGLint matrix    = [program uniform:@"modelMatrix"];\n'
-                       # '\tGLint texture   = [program uniform:@"Texture"];\n'
-                       '\tGLint position  = [program attribute:@"position"];\n'
-                       '\tGLint color     = [program attribute:@"color"];\n'
-                       '\tGLint normal    = [program attribute:@"normal"];\n'
-                       # '\t\tGLint textCoord = [program attribute:@"textCord"];\n'
-                       '\n'
-                       '\tglEnableVertexAttribArray(position);\n'
-                       '\tglEnableVertexAttribArray(normal);\n'
-                       # '\t\tglEnableVertexAttribArray(texCoord);\n
-                       '\n')
+                       '\t@autoreleasepool\n'
+                       '\t{\n'
+                       '\t\tNSMutableArray *finalys = [NSMutableArray array];\n\n'
+                       '\t\tglBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);\n'
+                       '\t\tglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_indexBuffer);\n\n'
+                       '\t\t@try\n'
+                       '\t\t{\n'
+                       '\t\t\tGLint modelMatrixUniform = [program uniform:@"modelMatrix"];\n'
+                       '\t\t\tglUniformMatrix4fv(modelMatrixUniform, 1, 0, m_modelMatrix.m);\n'
+                       '\t\t}\n'
+                       '\t\t@catch(NSException *) {}\n\n'
+                       '\t\t@try\n'
+                       '\t\t{\n'
+                       '\t\t\tGLint positionAttrib = [program attribute:@"position"];\n\n'
+                       '\t\t\tglEnableVertexAttribArray(positionAttrib);\n\n'
+                       '\t\t\tglVertexAttribPointer(positionAttrib, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), BUFFER_OFFSET(0));\n\n'
+                       '\t\t\t[finalys addObject:[BFFinaly finalyWithFunctor:^void(){\n'
+                       '\t\t\t\tglDisableVertexAttribArray(positionAttrib);\n'
+                       '\t\t\t}]];\n'
+                       '\t\t}\n'
+                       '\t\t@catch(NSException *) {}\n\n'
+                       '\t\t@try\n'
+                       '\t\t{\n'
+                       '\t\t\tGLint normalAttrib = [program attribute:@"normal"];\n\n'
+                       '\t\t\tglEnableVertexAttribArray(normalAttrib);\n\n'
+                       '\t\t\tglVertexAttribPointer(normalAttrib, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), BUFFER_OFFSET(sizeof(BFPoint3D)));\n\n'
+                       '\t\t\t[finalys addObject:[BFFinaly finalyWithFunctor:^void(){\n'
+                       '\t\t\t\tglDisableVertexAttribArray(normalAttrib);\n'
+                       '\t\t\t}]];\n'
+                       '\t\t}\n'
+                       '\t\t@catch(NSException *) {}\n\n'
+                       '\t\t@try\n'
+                       '\t\t{\n'
+                       '\t\t\tGLint useTextureUniform = [program uniform:@"useTexture"];\n'
+                       '\t\t\tGLint textCoordAttrib = [program attribute:@"textCoord"];\n\n'
+                       '\t\t\tglEnableVertexAttribArray(textCoordAttrib);\n\n'
+                       '\t\t\tglUniform1i(useTextureUniform, 1);\n'
+                       '\t\t\tglVertexAttribPointer(textCoordAttrib, 2, GL_FLOAT, GL_FALSE, sizeof(BFVertex), BUFFER_OFFSET(sizeof(BFPoint3D) * 2));\n\n'
+                       '\t\t\t[finalys addObject:[BFFinaly finalyWithFunctor:^void(){\n'
+                       '\t\t\t\tglUniform1i(useTextureUniform, 0);\n'
+                       '\t\t\t\tglDisableVertexAttribArray(textCoordAttrib);\n'
+                       '\t\t\t}]];\n'
+                       '\t\t}\n'
+                       '\t\t@catch(NSException *) {}\n\n')
             if kwargs['material']:
                 material = kwargs['material']
-                file.write('\t@try\n'
-                           '\t{\n'
-                           '\t\tGLint materialAmbientColor  = [program uniform:@"material.ambientColor"];\n'
-                           '\t\tGLint materialDiffuseColor  = [program uniform:@"material.diffuseColor"];\n'
-                           '\t\tGLint materialSpecularColor = [program uniform:@"material.specularColor"];\n'
-                           '\t\tGLint materialEmissionColor = [program uniform:@"material.emissionColor"];\n'
+                file.write('\t\t@try\n'
+                           '\t\t{\n'
+                           '\t\t\tGLint useMaterialUniform    = [program uniform:@"useMaterial"];\n'
+                           '\t\t\tGLint materialAmbientColor  = [program uniform:@"material.ambientColor"];\n'
+                           '\t\t\tGLint materialDiffuseColor  = [program uniform:@"material.diffuseColor"];\n'
+                           '\t\t\tGLint materialSpecularColor = [program uniform:@"material.specularColor"];\n'
+                           '\t\t\tGLint materialEmissionColor = [program uniform:@"material.emissionColor"];\n'
                            '\n'
-                           '\t\tglUniform4fv(materialAmbientColor,  1, (const GLfloat *)&k%sMaterial.ambientColor);\n'
-                           '\t\tglUniform4fv(materialDiffuseColor,  1, (const GLfloat *)&k%sMaterial.diffuseColor);\n'
-                           '\t\tglUniform4fv(materialSpecularColor, 1, (const GLfloat *)&k%sMaterial.specularColor);\n'
-                           '\t\tglUniform4fv(materialEmissionColor, 1, (const GLfloat *)&k%sMaterial.emissionColor);\n'
-                           '\t}\n' % (material.name, material.name, material.name, material.name))
-                file.write('\t@catch(NSException *e) { NSLog(@"Exception %@ rises with reason: %@", [e name], [e reason]); }\n\n')
-            file.write('\tglUniformMatrix4fv(matrix, 1, 0, m_modelMatrix.m);\n'
-                       '\tglVertexAttribPointer(position, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &kVertexes%s[0].coord);\n'
-                       '\tglVertexAttribPointer(normal, 3, GL_FLOAT, GL_FALSE, sizeof(BFVertex), &kVertexes%s[0].normal);\n\n'
-                       '\tglDrawElements(GL_TRIANGLES, sizeof(kIndices%s)/sizeof(GLuint), GL_UNSIGNED_INT, kIndices%s);\n\n'
-                       '\tglDisableVertexAttribArray(position);\n'
-	                   '\tglDisableVertexAttribArray(normal);\n'
-                       '}\n\n' % (class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name']), class_name(kwargs['name'])))
-            file.write('@synthesize modelMatrix = m_modelMatrix;\n\n')
-            file.write('@end')
-
+                           '\t\t\tglUniform1i(useMaterialUniform, 1);\n'
+                           '\t\t\tglUniform4fv(materialAmbientColor,  1, (const GLfloat *)&k%sMaterial.ambientColor);\n'
+                           '\t\t\tglUniform4fv(materialDiffuseColor,  1, (const GLfloat *)&k%sMaterial.diffuseColor);\n'
+                           '\t\t\tglUniform4fv(materialSpecularColor, 1, (const GLfloat *)&k%sMaterial.specularColor);\n'
+                           '\t\t\tglUniform4fv(materialEmissionColor, 1, (const GLfloat *)&k%sMaterial.emissionColor);\n'
+                           '\n'
+                           '\t\t\t[finalys addObject:[BFFinaly finalyWithFunctor:^void(){ glUniform1i(useMaterialUniform, 0); }]];\n'
+                           '\t\t}\n' % (material.name, material.name, material.name, material.name))
+                file.write('\t\t@catch(NSException *) {}\n\n')
+            file.write('\t\tglDrawElements(GL_TRIANGLES, sizeof(kIndices%s)/sizeof(GLuint), GL_UNSIGNED_INT, 0);\n\n' % class_name(kwargs['name']))
+            file.write('\t\tglBindBuffer(GL_ARRAY_BUFFER, 0);\n'
+                       '\t\tglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);\n'
+                       '\t}\n'
+                       '}\n\n'
+                       '@synthesize modelMatrix = m_modelMatrix;\n\n'
+                       '@end')
         return
 
         if self.prop_use_vertex_indices:
