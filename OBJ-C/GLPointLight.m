@@ -68,12 +68,12 @@ static int ObjectCount = 0;
 
 -(void)afterDraw:(BFGLProgram *)program
 {
-    @try
-    {
-        GLint isOn = [program uniform:[NSString stringWithFormat:@"pointLights[%d].isOn", m_lightID]];
-        glUniform1i(isOn, 0);
-    }
-    @catch(NSException *){}
+//    @try
+//    {
+//        GLint isOn = [program uniform:[NSString stringWithFormat:@"pointLights[%d].isOn", m_lightID]];
+//        glUniform1i(isOn, 0);
+//    }
+//    @catch(NSException *){}
 }
 
 -(void)draw:(BFGLProgram *)program

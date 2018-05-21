@@ -816,7 +816,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             if lamp.type == 'POINT':
                 base_class = 'BFGLPointLight'
                 file.write('#import "GLPointLight.h"\n\n')
-            file.write('@interface %s: %s\n' % (class_name(kwargs['name']), base_class))
+            file.write('@interface %s : %s\n' % (class_name(kwargs['name']), base_class))
             # for action in actions:
             #     file.write('-(void)%s:(float)t;\n' % action.name)
             file.write('@end\n\n')
