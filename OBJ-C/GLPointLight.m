@@ -17,7 +17,7 @@ static int ObjectCount = 0;
 	self = [super init];
 	if (self)
 	{
-        m_lightID = ++ObjectCount;
+        m_lightID = ObjectCount++;
         m_isLightOn = YES;
 		m_lightEnergy = 1.0;
 	}

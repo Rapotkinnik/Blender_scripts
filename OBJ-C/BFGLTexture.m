@@ -56,11 +56,9 @@
         GLint maxTextureSize;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
         if (MAX(size.height, size.width) > maxTextureSize)
-        {
-            NSLog(@"This device doesn't support texture with %fx%f size", size.width, size.height);
-            
-            return nil;
-        }
+            @throw [NSException exceptionWithName:@"Texture2DCreationException"
+                                           reason:[NSString stringWithFormat:@"This device doesn't support texture with %fx%f size", size.width, size.height]
+                                         userInfo:nil];
         
         GLint lastTexture;
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
@@ -68,6 +66,12 @@
         glBindTexture(GL_TEXTURE_2D, [super texture]);
         
         glTexImage2D(GL_TEXTURE_2D, 0, pixelFormat, size.width, size.height, 0, pixelFormat, pixelType, NULL);
+        
+        GLenum error = glGetError();
+        if (error != GL_NO_ERROR)
+            @throw [NSException exceptionWithName:@"Texture2DCreationException"
+                                           reason:[NSString stringWithFormat:@"Can't create Texture2D because glTexImage2D executes with error %d", error]
+                                         userInfo:nil];
         
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -82,7 +86,7 @@
 
 +(instancetype)shadowMapWithSize:(CGSize)size
 {
-    return [[[self class] alloc] initWithSize:size PixelType:GL_FLOAT PixelFormat:GL_DEPTH_COMPONENT];
+    return [[[self class] alloc] initWithSize:size PixelType:GL_UNSIGNED_SHORT PixelFormat:GL_DEPTH_COMPONENT];
 }
 
 +(instancetype)emptyCanvasToDrawWithSize:(CGSize)size;
@@ -166,11 +170,9 @@
         GLint maxTextureSize;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
         if (MAX(size.height, size.width) > maxTextureSize)
-        {
-            NSLog(@"This device doesn't support texture with %fx%f size", size.width, size.height);
-            
-            return nil;
-        }
+            @throw [NSException exceptionWithName:@"CubMapTextureCreationException"
+                                           reason:[NSString stringWithFormat:@"This device doesn't support texture with %fx%f size", size.width, size.height]
+                                         userInfo:nil];
         
         GLint lastTexture;
         glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
@@ -179,6 +181,12 @@
         
         for (uint i = 0; i < 6; ++i)
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, pixelFormat, size.width, size.height, 0, pixelFormat, pixelType, NULL);
+        
+        GLenum error = glGetError();
+        if (error != GL_NO_ERROR)
+            @throw [NSException exceptionWithName:@"CubMapTextureCreationException"
+                                           reason:[NSString stringWithFormat:@"Can't create CubMapTexture because glTexImage2D executes with error %d", error]
+                                         userInfo:nil];
         
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -194,7 +202,7 @@
 
 +(instancetype)shadowCubeMapWithSize:(CGSize)size
 {
-    return [[[self class] alloc] initWithSize:size PixelType:GL_FLOAT PixelFormat:GL_DEPTH_COMPONENT];
+    return [[[self class] alloc] initWithSize:size PixelType:GL_UNSIGNED_SHORT PixelFormat:GL_DEPTH_COMPONENT];
 }
 
 +(instancetype)emptyCanvasToDrawWithSize:(CGSize)size;

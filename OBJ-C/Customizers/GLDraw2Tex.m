@@ -62,31 +62,47 @@
     return [[[self class] alloc] initWithView:view Attachments:attachments];
 }
 
+-(BFFinaly *)bindCurrentFrameBuffer
+{
+    GLint lastFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &lastFramebuffer);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+    
+    return [BFFinaly finalyWithFunctor:^(){
+        glBindFramebuffer(GL_FRAMEBUFFER, lastFramebuffer); }];
+}
+
 -(GLint)getTextureForAttachment:(GLenum)attachment
 {
-    GLint objectType, objectName;
-    glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &objectType);
-    glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &objectName);
-    
-    if (objectType == GL_TEXTURE_2D)
-        return objectName;
+    @autoreleasepool
+    {
+        [self bindCurrentFrameBuffer];
         
-    return -1;
+        GLint objectType, objectName;
+    
+        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &objectType);
+        glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &objectName);
+
+        if (objectType == GL_TEXTURE_2D)
+            return objectName;
+    
+        return -1;
+    }
 }
 
 -(void)setTexture:(GLuint)texture WithTarget:(GLenum)target ForAttachment:(GLuint)attachment
 {
     @autoreleasepool
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
+        [self bindCurrentFrameBuffer];
+        
         glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, target, texture, 0);
     
-        [BFFinaly finalyWithFunctor:^(){ glBindFramebuffer(GL_FRAMEBUFFER, 0); }];
-    
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        GLenum checkin = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (checkin != GL_FRAMEBUFFER_COMPLETE)
             @throw [NSException exceptionWithName:@"FramebufferCompilationException"
-                                           reason:@"Framebuffer compilation error"
-                                         userInfo:nil];
+                                           reason:[NSString stringWithFormat:@"Framebuffer compilation error %d", checkin] userInfo:nil];
     }
 }
 
