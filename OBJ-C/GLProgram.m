@@ -5,6 +5,8 @@
 //  Created by Рапоткин Никалай on 11.09.14.
 //
 
+#import "BFFinaly.h"
+
 #import "GLProgram.h"
 
 const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|2D|Cube)";
@@ -145,13 +147,25 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
                 [m_uniforms setObject:[NSNull null] forKey:[line substringWithRange:[match range]]];
         }
         
+        BFFinaly *releaseVertexAndFragmentShader = ^() {
+            if (vertShader) {
+                glDetachShader(m_program, vertShaderId);
+                glDeleteShader(vertShaderId);
+            }
+            if (fragShader) {
+                glDetachShader(m_program, fragShaderId);
+                glDeleteShader(fragShaderId);
+            }
+        }; (void)releaseVertexAndFragmentShader;
         
         if (![self compileShader:&vertShaderId WithType:GL_VERTEX_SHADER WithSource:vertShader] ||
             ![self compileShader:&fragShaderId WithType:GL_FRAGMENT_SHADER WithSource:fragShader])
         {
-            @throw [NSException exceptionWithName:@"LoadingShadersException"
-                                           reason:@""
-                                         userInfo:nil];
+            NSNumber *type = [NSNumber numberWithUnsignedInt:vertShader ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER];
+            NSString *name = [NSString stringWithFormat:@"Loading%@ShadersException", vertShader ? @"Vertex" : @"Fragment"];
+            NSString *reason = [NSString stringWithFormat:@"Can't compile %@ shader", vertShader ? @"vertex" : @"fragment"];
+            
+            @throw [NSException exceptionWithName:name reason:reason userInfo:@{type : @"ShaderType"}];
         }
         
         m_program = glCreateProgram();
@@ -161,38 +175,11 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
         glAttachShader(m_program, fragShaderId);
         
         // Link program.
-        if (![self linkProgram:m_program]) {
-            NSLog(@"Failed to link program: %d", m_program);
-            
-            if (vertShader) {
-                glDeleteShader(vertShaderId);
-                vertShader = 0;
-            }
-            if (fragShader) {
-                glDeleteShader(fragShaderId);
-                fragShader = 0;
-            }
-            if (m_program) {
-                glDeleteProgram(m_program);
-                m_program = 0;
-            }
-            
-            NSLog(@"Failed to load vertex shader");
+        if (![self linkProgram:m_program])
             @throw [NSException exceptionWithName:@"LoadingShadersException"
-                                           reason:@""
+                                           reason:@"Can't link shader program"
                                          userInfo:nil];
-        }
-        
-        // Release vertex and fragment shaders.
-        if (vertShader) {
-            glDetachShader(m_program, vertShaderId);
-            glDeleteShader(vertShaderId);
-        }
-        if (fragShader) {
-            glDetachShader(m_program, fragShaderId);
-            glDeleteShader(fragShaderId);
-        }
-        
+
         NSArray *attribKeys = [m_attribs allKeys];
         for (NSString *key in attribKeys)
             [m_attribs setObject:[NSNumber numberWithInt:glGetAttribLocation(m_program, [key UTF8String])] forKey:key];
@@ -216,31 +203,26 @@ const NSString *TYPES_PATTERN = @"int|flaot|bool|b?vec[2-4]|mat[2-4]|sampler(1D|
 -(instancetype)initWithVertexShaderPath:(NSString *)vertShaderPath FragmentShaderPath:(NSString *)fragShaderPath Customizers:(NSArray *) customizers
 {
     NSError *error = nil;
-    NSString *vertShader = [NSString stringWithContentsOfFile:vertShaderPath
-                                                     encoding:NSUTF8StringEncoding
-                                                        error:&error];
-    if (!vertShader || error) {
-        NSString * reason = [NSString stringWithFormat:@"t must be in [0 .. 1], not %f;", 0.1];
+    NSString *vertShader = [NSString stringWithContentsOfFile:vertShaderPath encoding:NSUTF8StringEncoding error:&error];
+    NSString *fragShader = [NSString stringWithContentsOfFile:fragShaderPath encoding:NSUTF8StringEncoding error:&error];
+    
+    if (error) {
+        NSString *path = vertShader ? vertShaderPath : fragShaderPath;
+        NSString *reason = [NSString stringWithFormat:@"Can't load shader by path \"%@\" with error: %@", path, error];
         
-        NSLog(@"Failed to load vertex shader");
-        @throw [NSException exceptionWithName:@"LoadingShadersException"
-                                       reason:reason
-                                     userInfo:nil];
+        @throw [NSException exceptionWithName:@"LoadingShadersException" reason:reason userInfo:nil];
     }
     
-    NSString *fragShader = [NSString stringWithContentsOfFile:fragShaderPath
-                                                     encoding:NSUTF8StringEncoding
-                                                        error:&error];
-    if (!vertShader || error) {
-        NSString * reason = [NSString stringWithFormat:@"t must be in [0 .. 1], not %f;", 0.1];
-        
-        NSLog(@"Failed to load vertex shader");
-        @throw [NSException exceptionWithName:@"LoadingShadersException"
-                                       reason:reason
-                                     userInfo:nil];
+    @try {
+        return [self initWithVertexShader:vertShader FragmentShader:fragShader Customizers:customizers];
     }
-    
-    return [self initWithVertexShader:vertShader FragmentShader:fragShader Customizers:customizers];
+    @catch (NSException *exception) {
+        GLenum shaderType = [[[exception userInfo] valueForKey:@"ShaderType"] unsignedIntValue];
+        NSString *shaderPath = shaderType == GL_VERTEX_SHADER ? vertShaderPath : fragShaderPath;
+        NSString *extendedReason = [[exception reason] stringByAppendingFormat:@" %@", [shaderPath lastPathComponent]];
+        
+        @throw [NSException exceptionWithName:[exception name] reason:extendedReason userInfo:[exception userInfo]];
+    }
 }
 
 +(instancetype)glProgramWithVertexShader:(NSString *)vertShader FragmentShader:(NSString *)fragShader
