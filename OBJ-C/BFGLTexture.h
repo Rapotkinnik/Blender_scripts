@@ -9,6 +9,8 @@
 #import <GLKit/GLKit.h>
 #import <Foundation/Foundation.h>
 
+#import "BFFinaly.h"
+
 @interface BFGLTexture : NSObject
 {
     GLenum m_target;
@@ -19,6 +21,9 @@
 
 -(id)initWithTarget:(GLenum)target;
 -(id)initWithTarget:(GLenum)target Texture:(GLuint)texture;
+
+-(BFFinaly *)bind;
+-(BFFinaly *)bindToUnit:(GLuint)unit;
 
 @property(nonatomic, readonly) GLenum target;
 @property(nonatomic, readonly) GLuint texture;

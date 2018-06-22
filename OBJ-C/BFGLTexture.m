@@ -42,6 +42,36 @@
         glDeleteTextures(1, &m_texture);
 }
 
+-(BFFinaly *)bind
+{
+    return [self bindToUnit:0];
+}
+
+-(BFFinaly *)bindToUnit:(GLuint)unit
+{
+    GLint lastActivatedUnit = 0;
+    GLint lastBindedTexture = 0;
+    
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &lastActivatedUnit);
+    
+    switch ([self target]) {
+        case GL_TEXTURE_2D:
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastBindedTexture);
+            break;
+        case GL_TEXTURE_CUBE_MAP:
+            glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastBindedTexture);
+            break;
+    }
+    
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture([self target], [self texture]);
+    
+    return [BFFinaly finalyWithFunctor:^(){
+        glActiveTexture(lastActivatedUnit);
+        glBindTexture([self target], lastBindedTexture);
+    }];
+}
+
 @synthesize target = m_target, texture = m_texture, selfCreated = m_selfCreated;
 
 @end  // BFGLTexture
@@ -105,38 +135,29 @@
 
 -(void)setMinifyingFuction:(GLenum)fun
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_2D, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, fun);
-    
-    glBindTexture(GL_TEXTURE_2D, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, fun);
+    }
 }
 
 -(void)setMagnificationFunction:(GLenum)fun
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_2D, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, fun);
-    
-    glBindTexture(GL_TEXTURE_2D, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, fun);
+    }
 }
 
 -(void)setWrapFunction:(GLenum)fun ForCoordinate:(GLenum)coord
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_2D, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_2D, coord, fun);
-    
-    glBindTexture(GL_TEXTURE_2D, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexParameteri(GL_TEXTURE_2D, coord, fun);
+    }
 }
 
 -(void)setData:(const GLvoid *)data
@@ -146,14 +167,11 @@
 
 -(void)setData:(const GLvoid *)data WithOffset:(CGPoint)offset Size:(CGSize)size
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_2D, [super texture]);
-    
-    glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, size.width, size.height, m_pixelFormat, m_pixelType, data);
-    
-    glBindTexture(GL_TEXTURE_2D, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, size.width, size.height, m_pixelFormat, m_pixelType, data);
+    }
 }
 
 @synthesize size = m_size, pixelType = m_pixelType, pixelFormat = m_pixelFormat;
@@ -221,52 +239,40 @@
 
 -(void)setMinifyingFuction:(GLenum)fun
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, fun);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, fun);
+    }
 }
 
 -(void)setMagnificationFunction:(GLenum)fun
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, fun);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, fun);
+    }
 }
 
 -(void)setWrapFunction:(GLenum)fun ForCoordinate:(GLenum)coord
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, [super texture]);
-    
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, coord, fun);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, coord, fun);
+    }
 }
 
 -(void)setData:(const GLvoid *)data
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, [super texture]);
-    
-    GLuint offset = m_size.width * m_size.height * sizeof(GLuint);
-    for (uint i = 0; i < 6; ++i)
-        glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, 0, 0, m_size.width, m_size.height, m_pixelFormat, m_pixelType, (char *)data + offset * i);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        GLuint offset = m_size.width * m_size.height * sizeof(GLuint);
+        for (uint i = 0; i < 6; ++i)
+            glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, 0, 0, m_size.width, m_size.height, m_pixelFormat, m_pixelType, (char *)data + offset * i);
+    }
 }
 
 -(void)setData:(const GLvoid *)data ForFace:(GLenum)face;
@@ -276,14 +282,11 @@
 
 -(void)setData:(const GLvoid *)data WithOffset:(CGPoint)offset Size:(CGSize)size ForFace:(GLenum)face;
 {
-    GLint lastTexture;
-    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &lastTexture);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, [super texture]);
-    
-    glTexSubImage2D(face, 0, offset.x, offset.y, size.width, size.height, m_pixelFormat, m_pixelType, data);
-    
-    glBindTexture(GL_TEXTURE_CUBE_MAP, lastTexture);
+    @autoreleasepool {
+        BFFinaly *finaly = [self bind]; (void)finaly;
+        
+        glTexSubImage2D(face, 0, offset.x, offset.y, size.width, size.height, m_pixelFormat, m_pixelType, data);
+    }
 }
 
 @synthesize size = m_size, pixelType = m_pixelType, pixelFormat = m_pixelFormat;
