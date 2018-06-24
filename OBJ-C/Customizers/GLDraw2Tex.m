@@ -16,7 +16,6 @@
     if (self)
     {
         m_view = view;
-        m_textures = [NSMutableArray array];
         
         GLint maxRenderbufferSize;
         glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &maxRenderbufferSize);
@@ -26,32 +25,34 @@
                                          userInfo:nil];
         
         glGenFramebuffers(1, &m_framebuffer);
-        glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
         
-        for (;*attachments != 0; attachments++)
+        @autoreleasepool
         {
-            BFGLTexture *texture = nil;
-            switch (*attachments) {
-                case GL_DEPTH_ATTACHMENT:
-                    texture = [BFGLTexture2D shadowMapWithSize:view.size];
-                    break;
-                case GL_STENCIL_ATTACHMENT:
-                    break;
-                default:
-                    texture = [BFGLTexture2D emptyCanvasToDrawWithSize:view.size];
+            [self bindCurrentFrameBuffer];
+            
+            for (;*attachments != 0; attachments++)
+            {
+                BFGLTexture *texture = nil;
+                switch (*attachments) {
+                    case GL_DEPTH_ATTACHMENT:
+                        texture = [BFGLTexture2D shadowMapWithSize:view.size];
+                        break;
+                    case GL_STENCIL_ATTACHMENT:
+                        break;
+                    default:
+                        texture = [BFGLTexture2D emptyCanvasToDrawWithSize:view.size];
+                }
+            
+                if (!texture)
+                    continue;
+            
+                glFramebufferTexture2D(GL_FRAMEBUFFER, *attachments, GL_TEXTURE_2D, [texture texture], 0);
+                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                    @throw [NSException exceptionWithName:@"FramebufferCompilationException"
+                                                   reason:@"Framebuffer compilation error"
+                                                 userInfo:nil];
             }
-            
-            if (!texture)
-                continue;
-            
-            glFramebufferTexture2D(GL_FRAMEBUFFER, *attachments, GL_TEXTURE_2D, [texture texture], 0);
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-                @throw [NSException exceptionWithName:@"FramebufferCompilationException"
-                                               reason:@"Framebuffer compilation error"
-                                             userInfo:nil];
         }
-        
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
     return self;
@@ -69,8 +70,7 @@
     
     glBindFramebuffer(GL_FRAMEBUFFER, m_framebuffer);
     
-    return [BFFinaly finalyWithFunctor:^(){
-        glBindFramebuffer(GL_FRAMEBUFFER, lastFramebuffer); }];
+    return [BFFinaly finalyWithFunctor:^(){ glBindFramebuffer(GL_FRAMEBUFFER, lastFramebuffer); }];
 }
 
 -(GLint)getTextureForAttachment:(GLenum)attachment
@@ -123,8 +123,9 @@
 
 -(void)beforeDraw
 {
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_lastFramebuffer);
     glGetIntegerv(GL_VIEWPORT, m_lastViewPort);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_lastFramebuffer);
+    
     glViewport(m_view.origin.x, m_view.origin.y,
                m_view.size.width, m_view.size.height);
     

@@ -200,33 +200,36 @@ static NSTimeInterval kFrameDuration = 1.0 / 30.0;  // Время одного �
     if (!texture)
         return;
     
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    
-    GLint positionAttr = [program attribute:@"position"];
-    GLint uvCoordAttr = [program attribute:@"texCoord"];
-    
-    GLint textureUniform = [program uniform:@"objTexture"];
-    GLint useTextureUniform = [program uniform:@"useTexture"];
-    GLint modelMatrixUniform = [program uniform:@"modelMatrix"];
-    
-    glEnableVertexAttribArray(positionAttr);
-	glEnableVertexAttribArray(uvCoordAttr);
-    
-    glUniform1i(textureUniform, 0);
-    glUniform1i(useTextureUniform, 1);
-    glUniformMatrix4fv(modelMatrixUniform, 1, 0, [self modelMatrix].m);
-    
-    glVertexAttribPointer(positionAttr, 3, GL_FLOAT, GL_FALSE, 0, m_vertexes);
-    glVertexAttribPointer(uvCoordAttr, 2, GL_FLOAT, GL_FALSE, 0, m_uvCoord);
-    
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, m_indices);
-    
-    glUniform1i(useTextureUniform, 0);
-    glDisableVertexAttribArray(positionAttr);
-	glDisableVertexAttribArray(uvCoordAttr);
-    
-    glBindTexture(GL_TEXTURE_2D, 0);
+    @try {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        
+        GLint positionAttr = [program attribute:@"position"];
+        GLint textCoordAttr = [program attribute:@"texCoord"];
+        
+        GLint textureUniform = [program uniform:@"objTexture"];
+        GLint useTextureUniform = [program uniform:@"useTexture"];
+        GLint modelMatrixUniform = [program uniform:@"modelMatrix"];
+        
+        glEnableVertexAttribArray(positionAttr);
+        glEnableVertexAttribArray(textCoordAttr);
+        
+        glUniform1i(textureUniform, 0);
+        glUniform1i(useTextureUniform, 1);
+        glUniformMatrix4fv(modelMatrixUniform, 1, 0, [self modelMatrix].m);
+        
+        glVertexAttribPointer(positionAttr, 3, GL_FLOAT, GL_FALSE, 0, m_vertexes);
+        glVertexAttribPointer(textCoordAttr, 2, GL_FLOAT, GL_FALSE, 0, m_uvCoord);
+        
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, m_indices);
+        
+        glUniform1i(useTextureUniform, 0);
+        glDisableVertexAttribArray(positionAttr);
+        glDisableVertexAttribArray(textCoordAttr);
+        
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    @catch (NSException *) {}
 }
 
 @synthesize modelMatrix = m_modelMatrix, activeTextureSet = m_activeSet, activeStrategy = m_strategy;

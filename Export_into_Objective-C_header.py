@@ -793,8 +793,7 @@ class ExportObjCHeader(bpy.types.Operator, ExportHelper, IOOBJOrientationHelper)
             file.write('}\n\n')
             file.write('-(void)draw:(BFGLProgram *)program\n'
                        '{\n'
-                       '\tglViewport(%d, %d, %d, %d);\n\n' % (camera_data.shift_x, camera_data.shift_y, render.resolution_x, render.resolution_y))
-            file.write('\tGLint global_matrix = [program uniform:@"globalMatrix"];\n\n'
+                       '\tGLint global_matrix = [program uniform:@"globalMatrix"];\n\n'
                        '\tglUniformMatrix4fv(global_matrix, 1, 0, m_globalMatrix.m);\n\n')
             for obj in objects:
                 file.write('\t[m_%s draw:program];\n' % member_name(obj.name))

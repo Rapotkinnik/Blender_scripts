@@ -15,8 +15,7 @@
     
     GLint  m_lastFramebuffer;
     GLint  m_lastViewPort[4];
-
-    NSMutableArray *m_textures;
+    
     BFGLProgram *m_program;
 }
 
